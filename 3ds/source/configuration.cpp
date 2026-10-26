@@ -88,7 +88,7 @@ Configuration::Configuration(void)
                     updateJson               = true;
                 }
                 if (!(mJson->contains("auto_update") && (*mJson)["auto_update"].is_boolean())) {
-                    (*mJson)["auto_update"] = true;
+                    (*mJson)["auto_update"] = false;
                     updateJson              = true;
                 }
                 if (!(mJson->contains("theme") && (*mJson)["theme"].is_string())) {
@@ -96,7 +96,7 @@ Configuration::Configuration(void)
                     updateJson        = true;
                 }
                 if (!(mJson->contains("language") && (*mJson)["language"].is_string())) {
-                    (*mJson)["language"] = "en";
+                    (*mJson)["language"] = "ja";
                     updateJson           = true;
                 }
                 if (!(mJson->contains("last_transfer_address") && (*mJson)["last_transfer_address"].is_string())) {

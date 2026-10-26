@@ -31,7 +31,7 @@
     "de": "Modulscan, Systemspeicherstände, Wi-Fi-Übertragung und Wiederherstellungsbestätigung. Änderungen werden direkt in config.json auf der SD-Karte gespeichert.",
     "pt": "Verificação de cartucho, saves do sistema, transferência Wi-Fi e confirmação de restauração. As alterações são gravadas diretamente no config.json do seu cartão SD.",
     "nl": "Cartridgescan, systeemsaves, wifi-overdracht en herstelbevestiging. Wijzigingen worden direct naar config.json op je SD-kaart geschreven.",
-    "ja": "カートリッジのスキャン、システムセーブ、\nWi-Fi転送、リストア確認。変更は\nSDカードのconfig.json\nに直接書き込まれます。",
+    "ja": "カートリッジの検出、システムセーブ、\nWi-Fi転送、復元時の確認。変更は\nSDカードのconfig.jsonに保存されます。",
     "zh": "卡带扫描、系统存档、Wi-Fi 传输以及恢复确认\n所做的更改将直接写入到 SD 卡中的 config.json 文件",
     "ru": "Сканирование картриджей, системные сохранения, передача по Wi-Fi и подтверждение восстановления. Изменения записываются прямо в config.json на карте памяти."
   },
@@ -175,7 +175,7 @@
     "de": "Eingelegtes Modul beim Start erkennen",
     "pt": "Detectar o cartucho inserido ao iniciar",
     "nl": "Detecteer de geplaatste cartridge bij het opstarten",
-    "ja": "起動時に挿入されたカートを検出",
+    "ja": "起動時に挿入されたカードを検出",
     "zh": "启动软件时检测已插入的卡带",
     "ru": "Определять вставленный картридж при запуске"
   },
@@ -259,7 +259,7 @@
     "de": "Vor Wiederherstellung bestätigen",
     "pt": "Confirmar antes de restaurar",
     "nl": "Bevestigen vóór herstellen",
-    "ja": "リストア前に確認",
+    "ja": "復元前に確認",
     "zh": "恢复存档前先确认",
     "ru": "Подтвердить перед восстановлением"
   },
@@ -403,7 +403,7 @@
     "de": "Sprache der Benutzeroberfläche",
     "pt": "Idioma da interface",
     "nl": "Taal van de interface",
-    "ja": "UIの言語",
+    "ja": "画面に表示する言語",
     "zh": "界面语言",
     "ru": "Язык интерфейса"
   },
@@ -895,7 +895,7 @@
     "de": "Vorhandener Backup-Ordner konnte\nnicht rekursiv gelöscht werden.",
     "pt": "Falha ao excluir recursivamente o diretório de backup existente.",
     "nl": "Kon de bestaande back-upmap niet recursief verwijderen.",
-    "ja": "既存のバックアップフォルダを再帰的に削除できませんでした。",
+    "ja": "既存のバックアップフォルダと\nその内容を削除できませんでした。",
     "zh": "无法删除现有备份目录与其所包含的全部文件",
     "ru": "Не удалось рекурсивно удалить папку\nсуществующего бэкапа."
   },
@@ -931,7 +931,7 @@
     "de": "Pfad für die Konsole zu lang.\nKürzeren Ordnernamen verwenden.",
     "pt": "Caminho longo demais para o console.\nUse um nome de pasta mais curto.",
     "nl": "Pad te lang voor de console.\nGebruik een kortere mapnaam.",
-    "ja": "パスがコンソールには長すぎます。\n短いフォルダ名を使ってください。",
+    "ja": "本体で扱えるパスの長さを超えています。\nバックアップ名を短くしてください。",
     "zh": "路径超出主机限制\n请使用更短的文件夹名",
     "ru": "Путь слишком длинный для консоли.\nИспользуйте более короткое имя папки."
   },
@@ -979,7 +979,7 @@
     "de": "Speicherdaten konnten nicht übernommen werden.",
     "pt": "Falha ao gravar os dados do save.",
     "nl": "Kon savegegevens niet vastleggen.",
-    "ja": "セーブデータのコミットに失敗しました。",
+    "ja": "セーブデータの書き込み確定に失敗しました。",
     "zh": "提交存档数据失败",
     "ru": "Не удалось записать данные сохранения."
   },
@@ -1036,7 +1036,7 @@
     "de": "Wiederherstellung von {0} fehlgeschlagen.",
     "pt": "Falha ao restaurar {0}.",
     "nl": "Herstellen van {0} mislukt.",
-    "ja": "{0}のリストアに失敗しました。",
+    "ja": "{0}の復元に失敗しました。",
     "zh": "{0}恢复失败",
     "ru": "Не удалось восстановить {0}."
   },
@@ -1048,7 +1048,7 @@
     "de": "Fortschritt korrekt auf dem Datenträger gespeichert.",
     "pt": "Progresso salvo corretamente no disco.",
     "nl": "Voortgang correct op de schijf opgeslagen.",
-    "ja": "進行状況をディスクに正しく保存しました。",
+    "ja": "セーブデータをSDカードに保存しました。",
     "zh": "存档已成功保存到存储设备中",
     "ru": "Прогресс успешно сохранен на диск."
   },
@@ -1060,7 +1060,7 @@
     "de": "{0}\nwurde erfolgreich wiederhergestellt.",
     "pt": "{0}\nfoi restaurado com sucesso.",
     "nl": "{0}\nis succesvol hersteld.",
-    "ja": "{0}\nを正常にリストアしました。",
+    "ja": "{0}\nを復元しました。",
     "zh": "{0}\n已成功恢复",
     "ru": "{0}\nуспешно восстановлен."
   },
@@ -1228,7 +1228,7 @@
     "de": "Wiederherstellen",
     "pt": "Restaurar",
     "nl": "Herstellen",
-    "ja": "リストア",
+    "ja": "復元",
     "zh": "恢复存档",
     "ru": "Восстановить"
   },
@@ -1240,7 +1240,7 @@
     "de": "Backup",
     "pt": "Backup",
     "nl": "Back-up",
-    "ja": "バックアップ",
+    "ja": "保存",
     "zh": "备份",
     "ru": "Бэкап"
   },
@@ -1252,7 +1252,7 @@
     "de": "Wiederh.",
     "pt": "Restau.",
     "nl": "Herst.",
-    "ja": "リストア",
+    "ja": "復元",
     "zh": "恢复",
     "ru": "Восст."
   },
@@ -1264,7 +1264,7 @@
     "de": "Backup ausgewählt",
     "pt": "Backup selecionado",
     "nl": "Back-up geselecteerd",
-    "ja": "選択項目をバックアップ",
+    "ja": "選択分を保存",
     "zh": "备份选中的软件",
     "ru": "Бэкап выбранного"
   },
@@ -1276,7 +1276,7 @@
     "de": "Backup {0} ausgewählt",
     "pt": "Backup {0} selecionado",
     "nl": "Back-up {0} geselecteerd",
-    "ja": "{0}個をバックアップ",
+    "ja": "{0}件を保存",
     "zh": "备份选中的{0}项",
     "ru": "Бэкап выбранных: {0}"
   },
@@ -1444,7 +1444,7 @@
     "de": "Wiederherstellung",
     "pt": "Restauração",
     "nl": "Herstel",
-    "ja": "リストア",
+    "ja": "復元",
     "zh": "恢复",
     "ru": "Восстановление"
   },
@@ -1600,7 +1600,7 @@
     "de": "Ausgewählten Speicherstand wiederherstellen?",
     "pt": "Restaurar o save selecionado?",
     "nl": "Geselecteerde save herstellen?",
-    "ja": "選択したセーブをリストアしますか?",
+    "ja": "選択したセーブを復元しますか？",
     "zh": "要恢复所选的存档吗？",
     "ru": "Восстановить выбранное сохранение?"
   },
@@ -1612,7 +1612,7 @@
     "de": "Backup des ausgewählten Titels erstellen?",
     "pt": "Fazer backup do título selecionado?",
     "nl": "Back-up maken van geselecteerde titel?",
-    "ja": "選択したタイトルをバックアップしますか?",
+    "ja": "選択したタイトルをバックアップしますか？",
     "zh": "要备份所选的软件吗？",
     "ru": "Сделать бэкап выбранного тайтла?"
   },
@@ -1624,7 +1624,7 @@
     "de": "Backup des ausgewählten Speicherstands erstellen?",
     "pt": "Fazer backup do save selecionado?",
     "nl": "Back-up maken van geselecteerde save?",
-    "ja": "選択したセーブをバックアップしますか?",
+    "ja": "選択したセーブをバックアップしますか？",
     "zh": "要备份所选的存档吗？",
     "ru": "Сделать бэкап выбранного сохранения?"
   },
@@ -1648,7 +1648,7 @@
     "de": "Ausgewähltes Backup löschen?",
     "pt": "Excluir o backup selecionado?",
     "nl": "Geselecteerde back-up verwijderen?",
-    "ja": "選択したバックアップを削除しますか?",
+    "ja": "選択したバックアップを削除しますか？",
     "zh": "是否删除所选备份？",
     "ru": "Удалить выбранный бэкап?"
   },
@@ -2140,7 +2140,7 @@
     "de": "\"{0}\" ausführen?\nSkripte können Speicherstände und SD-Karten-Inhalte verändern.",
     "pt": "Executar \"{0}\"?\nScripts podem modificar saves e o conteúdo do cartão SD.",
     "nl": "\"{0}\" uitvoeren?\nScripts kunnen saves en de inhoud van de SD-kaart wijzigen.",
-    "ja": "\"{0}\"を実行しますか？\nスクリプトはセーブデータやSDカードの内容を変更できます。",
+    "ja": "「{0}」を実行しますか？\nセーブデータやSDカードの内容が変更されることがあります。",
     "zh": "要运行\"{0}\"吗？\n脚本可能会修改存档和SD卡中的内容",
     "ru": "Запустить \"{0}\"?\nСкрипты могут модифицировать сохранения и данные на SD-карте."
   },

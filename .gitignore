@@ -20,3 +20,4 @@ tools/chlink/dist/
 __pycache__
 
 tests/build/
+release/

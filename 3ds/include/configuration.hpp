@@ -59,7 +59,6 @@ public:
     bool autoUpdate(void);
     // "dark" (default) or "light". Selects the color palette; see Colors::apply.
     std::string theme(void);
-    // "en" (default) or "it". Selects the UI language; see i18n::setLanguage.
     std::string language(void);
     // Last "ip:port" entered in the wireless-transfer send prompt. Prefilled into
     // the keyboard next time; not surfaced in Settings. Empty until the first send.
@@ -139,9 +138,9 @@ private:
     bool mNandSaves = false, mDSiWareSaves = false, mScanCard = false, mTransferEnabled = false, mConfirmRestore = true;
     bool mFTPEnabled      = false;
     bool mQuickBackup     = false;
-    bool mAutoUpdate      = true;
+    bool mAutoUpdate      = false;
     std::string mTheme    = "dark";
-    std::string mLanguage = "en";
+    std::string mLanguage = "ja";
     std::string mLastTransferAddress; // last "ip:port" sent to; prefills the send keyboard
     std::string mDefaultReceivePin;   // "" = random PIN per receive
     u16 mServerPort      = TransferProto::kDefaultServerPort;
