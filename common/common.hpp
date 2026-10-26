@@ -59,14 +59,7 @@ namespace StringUtils {
 }
 
 namespace HostFiles {
-    // True when `name` is a file or directory a desktop OS wrote next to the real
-    // backup on the SD card rather than something the console ever produced.
-    // macOS is the usual source: a FAT/exFAT volume has nowhere to keep a file's
-    // extended attributes, so Finder stores them in an AppleDouble sidecar named
-    // "._<file>" beside it, and drops ".DS_Store" in every folder it opens.
-    // Those must never be pushed back into a save archive — a 3DS restore dies on
-    // one *after* it has already wiped the console-side save (#577). Matched by
-    // name only, so it stays a pure predicate the copy planners can filter with.
+
     bool isMetadata(const std::string& name);
 }
 

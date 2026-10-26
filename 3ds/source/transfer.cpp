@@ -57,16 +57,12 @@
 #include <unistd.h>
 #include <vector>
 
-// The wire protocol (CRC, zip framing, path safety, HTTP header/auth helpers) is
-// shared with the Switch build and chlink; the definitions live in
-// common/transferprotocol. This file owns only the 3DS file+socket IO around it.
 using namespace TransferProto;
 
 namespace {
-    // The server streams the raw upload body here; handleUpload extracts/copies
-    // straight from the file-part byte range, so no separate staged zip is needed.
+
     static const char* TEMP_UPLOAD = "/3ds/Checkpoint/transfer_upload.tmp";
-    // Legacy staging file from before the streaming server; still swept on boot.
+
     static const char* TEMP_ZIP_RECV_LEGACY = "/3ds/Checkpoint/transfer_recv.zip";
 
     std::string g_token;
@@ -75,14 +71,10 @@ namespace {
     bool g_receiverRunning = false;
     std::atomic<bool> g_pendingRefresh{false};
     std::atomic<bool> g_receiverCompleted{false};
-    // The PIN is the sole credential gating writes into the SD tree. Bound brute
-    // force: after this many bad-token uploads the receiver shuts itself down.
-    // Reset when the receiver is (re)armed in startReceiver.
+
     constexpr int MAX_AUTH_ATTEMPTS = 5;
     std::atomic<int> g_failedAuthAttempts{0};
 
-    // A 4-digit PIN from srand(time) is trivially predictable; seed from the
-    // system CSPRNG so a LAN peer can't reconstruct it from the clock.
     int generatePin()
     {
         u32 r   = 0;
@@ -92,23 +84,16 @@ namespace {
             psExit();
         }
         if (!ok) {
-            // Fallback: the high-resolution tick is far less predictable than the
-            // second-granularity clock the old srand(time) leaked.
+
             r = (u32)(svcGetSystemTick() ^ osGetTime());
         }
         return 1000 + (int)(r % 9000);
     }
-    // Guards the receiver state shared UI<->network thread: g_token (read by the
-    // server thread in handleUpload, written by the UI thread), g_receiverIp,
-    // g_receiverPort, g_receiverRunning, and g_receiverNotice /
-    // g_receiverCompletedName (written by handleUpload, read by the UI thread).
-    // Pass an empty string to clear the notice/name. TransferReceiver (4.1) is the
-    // real home for this state.
+
     std::mutex g_receiverMutex;
     std::string g_receiverNotice;
     std::string g_receiverCompletedName;
-    // Title the Receive row was opened from; the destination of last resort when
-    // the upload's meta names no installed title. 0 = none.
+
     u64 g_receiverSelectedTitle = 0;
 
     void setReceiverNotice(const std::string& notice)
@@ -186,9 +171,6 @@ namespace {
         return true;
     }
 
-    // Reads a bounded head window off the front of the streamed body so
-    // TransferProto::parseMultipart can locate the parts without scanning the
-    // (large) payload.
     bool readBodyHead(const std::u16string& bodyPath, u64 bodyLen, std::string& outHead, std::string& outError)
     {
         FSStream f(Archive::sdmc(), bodyPath, FS_OPEN_READ);
@@ -208,8 +190,6 @@ namespace {
         return true;
     }
 
-    // ByteReader over the streamed body, positioned at the file part's start.
-    // TransferProto::extractZip owns the length accounting.
     struct BodyReader : TransferProto::ByteReader {
         FSStream input;
         explicit BodyReader(const std::u16string& path, u64 startOffset) : input(Archive::sdmc(), path, FS_OPEN_READ)
@@ -228,7 +208,6 @@ namespace {
         size_t read(void* dst, size_t n) override { return input.good() ? input.read(dst, (u32)n) : 0; }
     };
 
-    // ExtractSink writing under a u16string destination root via FSStream.
     struct FsExtractSink : TransferProto::ExtractSink {
         std::u16string destRoot;
         std::optional<FSStream> output;
@@ -262,7 +241,6 @@ namespace {
         }
     };
 
-    // FileReader opening backup files (UTF-8 abs path) via FSStream for the send.
     struct FsFileReader : TransferProto::FileReader {
         std::optional<FSStream> stream;
         bool open(const std::string& absPath) override
@@ -282,9 +260,7 @@ namespace {
 
     Server::HttpResponse handleInfo(const std::string&, const std::string&)
     {
-        // Note: the PIN token is intentionally NOT exposed here. It must only ever
-        // be shown on the receiver's screen and entered manually on the sender, so
-        // that a device on the same network cannot read it and authenticate itself.
+
         nlohmann::json info;
         info["device"]         = "3DS";
         info["version"]        = StringUtils::format("%d.%d.%d", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
@@ -375,15 +351,12 @@ namespace {
                 destRoot      = (dataType == "extdata") ? t.extdataPath() : t.savePath();
                 foundTitle    = true;
                 mappedByGuess = true;
-                // A sender with no title id at all (chlink infers only a unique-id
-                // prefix from a 3DS folder name) is the normal case, not a mismatch.
+
                 setReceiverNotice(tid != 0 ? "Warning: title ID mismatch. Backup mapped by title name." : "Note: backup mapped by title name.");
                 Logging::warning("Title ID {} not found, mapped by title name '{}'.", titleId, titleName);
             }
         }
-        // Last resort: the title the user had open when they started the receiver.
-        // Its backup list is where the Receive row lives, so it is the destination
-        // they pointed at, and it beats stranding the backup in an "Unknown" folder.
+
         if (!foundTitle) {
             u64 selectedId = 0;
             {
@@ -402,10 +375,7 @@ namespace {
         }
 
         if (!foundTitle) {
-            // Name the folder exactly as TitleProbe would once this title is
-            // installed ("0x%05X " + sanitized name), so the received backup
-            // reconciles with the title's real folder instead of stranding in a
-            // titleId-named one. Fall back to a bare name only when we have no id.
+
             std::string safeName         = titleName.empty() ? "Unknown" : titleName;
             std::u16string sanitizedName = StringUtils::removeForbiddenCharacters(StringUtils::UTF8toUTF16(safeName.c_str()));
             std::u16string folder        = (tid != 0) ? Paths::ctrFolderName(tid, sanitizedName) : sanitizedName;
@@ -438,15 +408,11 @@ namespace {
                 extractError = "Failed to open received package.";
             }
             if (!extracted) {
-                // A failed (or cancelled) extract leaves a half-populated backup
-                // folder behind; remove it so the receiver never keeps a backup
-                // it can't trust.
+
                 io::deleteFolderRecursively(Archive::sdmc(), backupRoot);
                 cleanup();
                 std::string message = extractError.empty() ? "Failed to extract package." : extractError;
-                // Build via nlohmann so a message with a quote/backslash can't
-                // produce malformed JSON (the sender would then show "no response"
-                // instead of the real cause).
+
                 nlohmann::json err;
                 err["ok"]    = false;
                 err["error"] = message;
@@ -462,7 +428,6 @@ namespace {
             std::u16string safeFileName = StringUtils::UTF8toUTF16(safeFileNameUtf8.c_str());
             std::u16string outputPath   = backupRoot + safeFileName;
 
-            // Copy the file-part byte range straight out of the streamed body.
             FSStream input(Archive::sdmc(), bodyPath, FS_OPEN_READ);
             FSStream output(Archive::sdmc(), outputPath, FS_OPEN_WRITE, (u32)fileLen);
             if (!input.good() || !output.good()) {
@@ -525,15 +490,8 @@ namespace {
         return {200, "application/json", resp.dump()};
     }
 
-    // A stalled receiver must not wedge the sender: the send runs on the
-    // TransferJob worker and app exit is gated on !active(), so a peer that
-    // accepts and then never reads/replies would hang recv()/send() and join()
-    // forever. The 3DS SOC layer has no SO_RCVTIMEO (see server.cpp's pollRecv),
-    // so we keep the socket non-blocking and bound every wait with poll().
     constexpr int NET_TIMEOUT_MS = 15000;
 
-    // Waits up to timeoutMs for `events` on sock. Returns 1 if ready, 0 on
-    // timeout, -1 on error.
     int pollSocket(int sock, short events, int timeoutMs)
     {
         struct pollfd pfd;
@@ -550,7 +508,7 @@ namespace {
         size_t sent   = 0;
         while (sent < len) {
             if (pollSocket(sock, POLLOUT, NET_TIMEOUT_MS) <= 0) {
-                return false; // timeout or error: abandon rather than block forever
+                return false;
             }
             int rc = send(sock, ptr + sent, len - sent, 0);
             if (rc <= 0) {
@@ -561,7 +519,6 @@ namespace {
         return true;
     }
 
-    // ByteSink over the poll-gated send socket for TransferProto::sendZipStream.
     struct SocketByteSink : TransferProto::ByteSink {
         int sock;
         explicit SocketByteSink(int s) : sock(s) {}
@@ -616,9 +573,7 @@ bool Transfer::startReceiver(std::string& outError, u64 selectedTitleId)
     }
 
     g_failedAuthAttempts.store(0);
-    // A PIN configured in Settings wins, so a PC-side script can be pointed at
-    // the console without reading the screen first; anything not exactly 4
-    // digits (including the empty default) falls back to a fresh random one.
+
     std::string token = Configuration::getInstance().defaultReceivePin();
     if (!TransferProto::validPin(token)) {
         token = StringUtils::format("%04d", generatePin());
@@ -636,8 +591,6 @@ bool Transfer::startReceiver(std::string& outError, u64 selectedTitleId)
         ip = ip.substr(0, pos);
     }
 
-    // Publish token/ip/port before the handler is reachable, so an upload that
-    // arrives the instant it registers validates against the real token.
     {
         std::lock_guard<std::mutex> lock(g_receiverMutex);
         g_token                 = token;
@@ -734,8 +687,7 @@ void Transfer::clearReceiverCompletion(void)
 Transfer::SendOutcome Transfer::sendBackup(const Title& title, const std::u16string& backupPath, const std::string& backupName,
     const std::string& dataType, const std::string& ip, u16 port, const std::string& token)
 {
-    // Every exit path must clear the transfer modal; the scope guard makes
-    // that hold for each early return below.
+
     struct StatusGuard {
         ~StatusGuard() { TransferStatus::end(); }
     } statusGuard;
@@ -747,9 +699,6 @@ Transfer::SendOutcome Transfer::sendBackup(const Title& title, const std::u16str
         return SendOutcome{false, SendStage::EmptyBackup, ""};
     }
 
-    // Multi-file backups are zipped on the fly by sendZipStream — no staged
-    // temp zip on SD; the exact zip size is known upfront because entries are
-    // store-only.
     bool isZip = files.size() != 1 || !dirs.empty();
     std::u16string payloadPath;
     std::string payloadName;
@@ -761,7 +710,7 @@ Transfer::SendOutcome Transfer::sendBackup(const Title& title, const std::u16str
             return SendOutcome{false, SendStage::PayloadTooLarge, ""};
         }
         payloadName = "backup.zip";
-        payloadSize = (u32)*zipSize; // checked <= kZipMaxSize above
+        payloadSize = (u32)*zipSize;
     }
     else {
         const SendFile& entry = files.front();
@@ -831,17 +780,11 @@ Transfer::SendOutcome Transfer::sendBackup(const Title& title, const std::u16str
     if (inet_pton(AF_INET, ip.c_str(), &addr.sin_addr) != 1) {
         return SendOutcome{false, SendStage::Resolve, ""};
     }
-    // Connect while still blocking. The 3DS SOC layer does not reliably report
-    // EINPROGRESS / SO_ERROR for a non-blocking connect (server.cpp forces its
-    // client socket blocking for the same reason), so the poll(POLLOUT)+SO_ERROR
-    // dance bailed out immediately on every attempt. Only the reachable-host case
-    // matters here; the send/recv poll timeouts below still guard a stalled peer.
+
     if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
         return SendOutcome{false, SendStage::Connect, ""};
     }
 
-    // Non-blocking only from here on; every send/recv below is poll-gated so a
-    // half-open peer can't block forever.
     fcntl(sock, F_SETFL, fcntl(sock, F_GETFL, 0) | O_NONBLOCK);
 
     std::string header = StringUtils::format("POST /transfer/upload HTTP/1.1\r\nHost: %s:%d\r\nConnection: close\r\n", ip.c_str(), port);
@@ -860,8 +803,7 @@ Transfer::SendOutcome Transfer::sendBackup(const Title& title, const std::u16str
                 sink, files, dirs, reader, []() { return TransferStatus::cancelRequested(); }, [](size_t n) { TransferStatus::addBytesDone(n); },
                 cancelled)) {
             if (cancelled) {
-                // The scope guard closes the socket, dropping the connection,
-                // which the receiver treats as an aborted request.
+
                 return SendOutcome{false, SendStage::Cancelled, ""};
             }
             ok = false;
@@ -878,8 +820,7 @@ Transfer::SendOutcome Transfer::sendBackup(const Title& title, const std::u16str
             while (!input.eof()) {
                 if (TransferStatus::cancelRequested()) {
                     input.close();
-                    // The scope guard closes the socket, dropping the connection,
-                    // which the receiver treats as an aborted request.
+
                     return SendOutcome{false, SendStage::Cancelled, ""};
                 }
                 u32 rd = input.read(buf.get(), kBuf);
@@ -905,7 +846,7 @@ Transfer::SendOutcome Transfer::sendBackup(const Title& title, const std::u16str
         char responseBuf[512];
         while (true) {
             if (pollSocket(sock, POLLIN, NET_TIMEOUT_MS) <= 0) {
-                break; // timeout or error: stop waiting on a silent peer
+                break;
             }
             int rc = recv(sock, responseBuf, sizeof(responseBuf), 0);
             if (rc <= 0) {

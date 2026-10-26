@@ -27,7 +27,6 @@
 #include "fsstream.hpp"
 #include "csvc.hpp"
 
-// GBA VC saves are always exposed by FSPXI under this fixed binary path.
 static const u32 pxi_path[5] = {1, 1, 3, 0, 0};
 
 FSStream::FSStream(FS_Archive archive, const std::u16string& path, u32 flags)
@@ -35,8 +34,7 @@ FSStream::FSStream(FS_Archive archive, const std::u16string& path, u32 flags)
     mGood   = false;
     mSize   = 0;
     mOffset = 0;
-    // Default to a zeroed FS handle so a failed open leaves mHandle valid (and
-    // isPxi() false) instead of the variant's default-constructed FSPXI_File.
+
     mHandle    = (Handle)0;
     Handle hnd = 0;
 
@@ -111,7 +109,7 @@ Result FSStream::close(void)
         mResult = FSPXI_CloseFile(FsPxiHandle, std::get<FSPXI_File>(mHandle));
     }
     else {
-        // Writes no longer flush per-call (see write()); flush once here before close.
+
         Handle h = std::get<Handle>(mHandle);
         FSFILE_Flush(h);
         mResult = FSFILE_Close(h);
@@ -156,11 +154,11 @@ u32 FSStream::write(const void* buf, u32 sz)
 {
     u32 wt = 0;
     if (isPxi()) {
-        // PXI has no flush-on-close; keep the per-write flush for the single GBA save file.
+
         mResult = FSPXI_WriteFile(FsPxiHandle, std::get<FSPXI_File>(mHandle), &wt, mOffset, buf, sz, FS_WRITE_FLUSH);
     }
     else {
-        // Skip the per-write flush; close() flushes once. Avoids a flush per 16 KB chunk and per tiny header write.
+
         mResult = FSFILE_Write(std::get<Handle>(mHandle), &wt, mOffset, buf, sz, 0);
     }
     mOffset += wt;

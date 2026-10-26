@@ -37,9 +37,7 @@ public:
     void update(const InputState& input) override;
 
 private:
-    // Frames B has been held while an upload is in flight; a held B cancels the
-    // active upload first, and only a B press with no upload running closes the
-    // overlay (receiver lifetime == overlay lifetime).
+
     int mCancelHoldFrames = 0;
 };
 

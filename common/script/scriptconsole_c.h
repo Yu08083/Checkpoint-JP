@@ -29,20 +29,12 @@
 
 #include <stdio.h>
 
-/* The C face of ScriptConsole, for picoc's stdlib and platform layer (both C).
- * Everything a script prints goes through one of these two, so the log pane,
- * the app log and the run's Outcome all see the same bytes. */
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Raw output. `len` is a byte count, not a terminator-delimited length. */
 void ckpt_console_write(const char* data, int len);
 
-/* An unbuffered stream whose writes land in the console. Script printf() and
- * friends print here instead of to the real stdout, which is nowhere on either
- * console. Never NULL: degrades to stdout if the stream cannot be created. */
 FILE* ckpt_console_stdout(void);
 
 #ifdef __cplusplus

@@ -24,14 +24,6 @@
  *         reasonable ways as different from the original version.
  */
 
-// The progress_* script API. Platform-neutral: both targets render
-// ScriptConsole the same way, only the tile geometry differs.
-//
-// Every binding here is a plain state write and returns immediately. That is
-// the point: a script reporting progress from inside a copy loop must never
-// wait for a frame, so unlike the gui_* bindings none of these touch
-// ScriptUiBridge. The UI thread reads a snapshot whenever it happens to draw.
-
 #include "scriptargs.hpp"
 #include "scriptconsole.hpp"
 
@@ -41,10 +33,7 @@ extern "C" {
 }
 
 namespace {
-    // A layer index used to be cast straight to size_t and handed to
-    // ScriptConsole, whose range check then swallowed a negative one whole: the
-    // bar simply never appeared and the script had no way to find out. Checked
-    // here instead, so the mistake is reported at the call that made it.
+
     size_t layerArg(const ScriptArgs& args)
     {
         return (size_t)args.numInRange(0, 0, (int)ScriptConsole::MAX_LAYERS - 1);

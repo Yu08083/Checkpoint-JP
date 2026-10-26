@@ -1,4 +1,3 @@
-/*  */
 #include <string.h>
 
 #include "interpreter.h"
@@ -178,10 +177,7 @@ void StringStrxfrm(
 void StringStrdup(
     struct ParseState* Parser, struct Value* ReturnValue, struct Value** Param, int NumArgs)
 {
-    /* Through the script heap, not the C library's strdup: a script's free()
-       is ScriptHeap::release, which ignores a pointer the heap does not own, so
-       a libc strdup would leak for the whole run and log a warning per free.
-       Anything a script can free has to be allocated the way its malloc is. */
+
     const char* src = Param[0]->Val->Pointer;
     if (src == NULL)
     {
@@ -206,7 +202,6 @@ void StringStrtok_r(
 }
 #endif
 
-/* all string.h functions */
 struct LibraryFunction StringFunctions[] = {
 #ifndef WIN32
     {StringIndex,       "char *index(char *,int);"              },
@@ -243,10 +238,9 @@ struct LibraryFunction StringFunctions[] = {
     {NULL,              NULL                                    }
 };
 
-/* creates various system-dependent definitions */
 void StringSetupFunc(Picoc* pc)
 {
-    /* define NULL */
+
     if (!VariableDefined(pc, TableStrRegister(pc, "NULL")))
     {
         VariableDefinePlatformVar(

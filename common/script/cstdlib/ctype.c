@@ -1,4 +1,3 @@
-/*  */
 #include <ctype.h>
 
 #include "interpreter.h"
@@ -100,7 +99,6 @@ void StdToascii(
     ReturnValue->Val->Integer = toascii(Param[0]->Val->Integer);
 }
 
-/* all string.h functions */
 struct LibraryFunction StdCtypeFunctions[] = {
     {StdIsalnum,  "int isalnum(int);" },
     {StdIsalpha,  "int isalpha(int);" },

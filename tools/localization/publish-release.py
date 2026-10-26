@@ -27,7 +27,7 @@ try:
 except urllib.error.HTTPError as error:
     if error.code != 404:
         raise
-    release = request('POST', api, {'tag_name': tag, 'target_commitish': os.environ['GITHUB_SHA'], 'name': 'Checkpoint 日本語版 ' + tag, 'body': 'Checkpoint.cia をFBIでインストールしてください。', 'draft': True, 'prerelease': False})
+    release = request('POST', api, {'tag_name': tag, 'target_commitish': os.environ['GITHUB_SHA'], 'name': 'Checkpoint 日本語版 ' + tag, 'body': 'FBIのQR読み取りでインストールできます。\n\n![インストール用QR](https://raw.githubusercontent.com/Yu08083/Checkpoint-JP/japanese-3ds/docs/install-qr.png)', 'draft': True, 'prerelease': False})
 
 existing = {asset['name']: asset['id'] for asset in release['assets']}
 for path in sorted(Path('release').iterdir()):

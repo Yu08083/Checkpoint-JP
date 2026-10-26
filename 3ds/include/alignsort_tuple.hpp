@@ -55,7 +55,6 @@ namespace internal {
                 ret[i] = i;
             }
 
-            // Sort by alignment
             stable_sort_on(ret, [](std::size_t a, std::size_t b) { return alignments[a] < alignments[b]; });
 
             return ret;
@@ -82,7 +81,7 @@ namespace internal {
 
     template <typename... Ts>
     using alignsort_tuple_calc_t = typename alignsort_tuple_calc<Ts...>::type;
-} // namespace internal
+}
 
 template <typename... Ts>
 struct alignsort_tuple;
@@ -93,7 +92,7 @@ namespace std {
 
     template <typename... Args>
     struct tuple_size<alignsort_tuple<Args...>> : tuple_size<tuple<Args...>> {};
-} // namespace std
+}
 
 template <typename... Ts>
 struct alignsort_tuple : public internal::alignsort_tuple_calc_t<Ts...> {
@@ -125,8 +124,6 @@ private:
         : calc::type(std::allocator_arg_t{}, a, std::get<calc::indices[ArrAccess]>(std::forward<decltype(argsAsTuple)>(argsAsTuple))...)
     {
     }
-
-    // Turn std::tuple<>reftype into std::tuple<reftype>
 
     template <typename... Args>
     static constexpr auto create_ref_tuple(std::tuple<Args...>& t) noexcept
@@ -174,8 +171,6 @@ public:
 
     constexpr void swap(alignsort_tuple& other) noexcept(noexcept(parent::swap(other))) { parent::swap(other); }
 
-    // Conversion between alignsort_tuples of different arg order
-
     template <typename... Args>
         requires std::is_same_v<internal::alignsort_tuple_calc_t<Args...>, typename calc::type>
     constexpr alignsort_tuple(alignsort_tuple<Args...>& other) : calc::type(static_cast<typename calc::type&>(other))
@@ -200,8 +195,6 @@ public:
     {
     }
 
-    // Conversion of std::tuple
-
     template <typename... Args>
     constexpr alignsort_tuple(std::tuple<Args...>& other) : alignsort_tuple(create_ref_tuple(other), idx())
     {
@@ -221,8 +214,6 @@ public:
     constexpr alignsort_tuple(const std::tuple<Args...>&& other) : alignsort_tuple(create_ref_tuple(other), idx())
     {
     }
-
-    // Conversion of std::pair
 
     template <typename Arg0, typename Arg1>
     constexpr alignsort_tuple(std::pair<Arg0, Arg1>& p) : alignsort_tuple(std::tuple<Arg0&, Arg1&>(std::get<0>(p), std::get<1>(p)), idx())
@@ -246,22 +237,16 @@ public:
     {
     }
 
-    // Allocator versions of above
-
-    // Empty constructor (allocator)
     template <typename Alloc>
     constexpr alignsort_tuple(std::allocator_arg_t, const Alloc& a) : calc::type(std::allocator_arg_t{}, a)
     {
     }
 
-    // Main constructor (allocator)
     template <typename Alloc, typename... Args>
     constexpr alignsort_tuple(std::allocator_arg_t, const Alloc& a, Args&&... args)
         : alignsort_tuple(a, std::tuple<decltype(args)...>(std::forward<decltype(args)>(args)...), idx())
     {
     }
-
-    // Conversion from other alignsort_tuples of different arg order (allocator)
 
     template <typename Alloc, typename... Args>
         requires std::is_same_v<internal::alignsort_tuple_calc_t<Args...>, typename calc::type>
@@ -291,7 +276,6 @@ public:
     {
     }
 
-    // Conversion from std::tuple (allocator)
     template <typename Alloc, typename... Args>
     constexpr alignsort_tuple(std::allocator_arg_t, const Alloc& a, std::tuple<Args...>& other) : alignsort_tuple(a, create_ref_tuple(other), idx())
     {
@@ -313,8 +297,6 @@ public:
         : alignsort_tuple(a, create_ref_tuple(other), idx())
     {
     }
-
-    // Conversion from std::pair (allocator)
 
     template <typename Alloc, typename Arg0, typename Arg1>
     constexpr alignsort_tuple(std::allocator_arg_t, const Alloc& a, std::pair<Arg0, Arg1>& p)
@@ -339,8 +321,6 @@ public:
         : alignsort_tuple(a, std::tuple<const Arg0&, const Arg1&>(std::get<0>(p), std::get<1>(p)), idx())
     {
     }
-
-    // Copy/move constructors (allocator)
 
     template <typename Alloc>
     constexpr alignsort_tuple(std::allocator_arg_t, const Alloc& a, alignsort_tuple& other)
@@ -395,7 +375,7 @@ namespace std {
         using AT = alignsort_tuple<Args...>;
         return std::get<AT::revIdx[I]>(static_cast<const typename AT::parent&&>(self));
     }
-} // namespace std
+}
 
 template <typename... Args>
 alignsort_tuple(Args...) -> alignsort_tuple<Args...>;

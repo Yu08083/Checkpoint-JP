@@ -24,57 +24,6 @@
  *         reasonable ways as different from the original version.
  */
 
-// device_seal / device_unseal: authenticated encryption for the small secrets a
-// script has to keep on the SD card between runs — an OAuth refresh token, an
-// API key. One copy for both consoles; everything console-specific is the 32
-// bytes ScriptHost::deviceSecret answers with.
-//
-// WHAT THIS DOES AND DOES NOT PROTECT AGAINST. Neither console isolates
-// homebrew: every app has the whole SD card, and Checkpoint is open source, so
-// any other homebrew can reproduce the console-bound half of the key by
-// following this file. A seal is therefore not a boundary against another
-// homebrew app on the same console, and no message shown to a user may claim it
-// is. What it does buy, because the console-bound half is never written to the
-// SD card:
-//
-//   * an SD card read on a PC, or an SD image, holds nothing usable;
-//   * a config folder the user zips up and shares leaks nothing;
-//   * a scraper globbing for *token*.json / client_secret.json finds nothing;
-//   * moving the card to another console does not carry the credential over.
-//
-// The passphrase half is the real boundary: it is not on the card and not in the
-// console either, so an attacker holding the blob has to guess it. It is opt-in
-// per blob because it costs the user a keyboard prompt per run.
-//
-// Blob layout, little-endian, header 60 bytes:
-//
-//   0   8   magic "CKPTSEAL"
-//   8   1   version (1)
-//   9   1   flags, bit 0 = a passphrase is part of the key
-//   10  1   device key source (a DeviceKeySource; 0 = passphrase only)
-//   11  1   reserved, 0
-//   12  4   PBKDF2 iteration count (0 when there is no passphrase)
-//   16  16  salt
-//   32  12  GCM nonce
-//   44  16  GCM tag
-//   60  ..  ciphertext, same length as the plaintext
-//
-// Key derivation, with a zero-filled stand-in for whichever half is absent:
-//
-//   dk  = ScriptHost::deviceSecret(source)
-//   pk  = PBKDF2-HMAC-SHA256(passphrase, salt, iterations, 32)
-//   key = HMAC-SHA256(key = salt, msg = "CKPTSEAL1" || dk || pk)
-//
-// then AES-256-GCM with bytes [0, 44) of the header as additional data, so the
-// version, the flags, the recorded key source, the iteration count and the salt
-// are all authenticated: an attacker cannot strip the passphrase flag or swap
-// the key source to steer us at a weaker derivation without failing the tag.
-//
-// The recorded key source is why unseal asks for one specific source rather than
-// "the best available". A platform whose strongest source stops answering after
-// a firmware or CFW change would otherwise silently derive a different key, and
-// the user would lose their own credential to what looks like corruption.
-
 #include "scriptargs.hpp"
 #include "scriptheap.hpp"
 #include "scripthost.hpp"
@@ -101,7 +50,7 @@ namespace {
     constexpr size_t kTagSize     = 16;
     constexpr size_t kKeySize     = 32;
     constexpr size_t kHeaderSize  = 60;
-    constexpr size_t kAadSize     = 44; // header up to (not including) the tag
+    constexpr size_t kAadSize     = 44;
     constexpr size_t kOffFlags    = 9;
     constexpr size_t kOffSource   = 10;
     constexpr size_t kOffIters    = 12;
@@ -109,22 +58,16 @@ namespace {
     constexpr size_t kOffNonce    = 32;
     constexpr size_t kOffTag      = 44;
 
-    // What a fresh seal costs the user. Stored per blob rather than assumed, so
-    // this can be raised for newer consoles without orphaning older blobs — the
-    // slowest hardware we run on is the 3DS's 268 MHz ARM11 with no crypto
-    // acceleration, where this is on the order of a second, paid once per run.
     constexpr uint32_t kIterations = 60000;
 
-    // Script-visible result codes. Shared by both bindings so a script can log
-    // one number; kept in the <checkpoint.h> prototype comment as well.
     enum SealResult : int {
         SealOk         = 0,
-        SealBadArgs    = -1, // not a sealed blob, or nothing to seal
-        SealBadVersion = -2, // a blob from a newer Checkpoint
+        SealBadArgs    = -1,
+        SealBadVersion = -2,
         SealNoMemory   = -3,
-        SealNoKey      = -4, // no console key source and no passphrase either
-        SealAuthFailed = -5, // wrong passphrase, wrong console, or tampered
-        SealNoRandom   = -6, // the platform could not produce a salt/nonce
+        SealNoKey      = -4,
+        SealAuthFailed = -5,
+        SealNoRandom   = -6,
     };
 
     void putU32(uint8_t* p, uint32_t v)
@@ -145,11 +88,6 @@ namespace {
         return blob != nullptr && size >= kHeaderSize && memcmp(blob, kMagic, sizeof(kMagic)) == 0;
     }
 
-    // The two halves mixed into one AES-256 key. `source` is the exact
-    // DeviceKeySource to bind to (DeviceKeySourceNone for passphrase only), and
-    // a passphrase of "" means there is none. False when neither half exists —
-    // deriving from the label and the salt alone would be a key anyone can
-    // compute, which is worse than refusing.
     bool deriveKey(int source, const char* passphrase, const uint8_t* salt, uint32_t iterations, uint8_t* outKey)
     {
         const bool hasPass = passphrase != nullptr && passphrase[0] != '\0';
@@ -157,9 +95,6 @@ namespace {
             return false;
         }
 
-        // "CKPTSEAL1" || dk || pk, with a zero-filled half for whichever is
-        // absent, so the message stays a fixed length and no two different
-        // (device, passphrase) pairs can produce the same bytes.
         uint8_t material[9 + kKeySize + kKeySize];
         memset(material, 0, sizeof(material));
         memcpy(material, "CKPTSEAL1", 9);
@@ -173,15 +108,14 @@ namespace {
             const mbedtls_md_info_t* md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
             mbedtls_md_context_t md_ctx;
             mbedtls_md_init(&md_ctx);
-            ok = md != nullptr && mbedtls_md_setup(&md_ctx, md, 1 /* HMAC */) == 0 &&
+            ok = md != nullptr && mbedtls_md_setup(&md_ctx, md, 1  ) == 0 &&
                  mbedtls_pkcs5_pbkdf2_hmac(&md_ctx, (const unsigned char*)passphrase, strlen(passphrase), salt, kSaltSize, iterations,
                      (uint32_t)kKeySize, material + 9 + kKeySize) == 0;
             mbedtls_md_free(&md_ctx);
         }
 
         if (ok) {
-            // HKDF's extract step: the salt is the HMAC key, the two halves are
-            // the message, and SHA-256's output is already exactly the key size.
+
             const mbedtls_md_info_t* md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
             ok                          = md != nullptr && mbedtls_md_hmac(md, salt, kSaltSize, material, sizeof(material), outKey) == 0;
         }
@@ -190,8 +124,6 @@ namespace {
         return ok;
     }
 
-    // Hands a run-scoped copy of `size` bytes to the script through an out
-    // parameter pair, then wipes the working buffer. False = out of memory.
     bool handOver(const uint8_t* data, size_t size, char** out, int* outSize)
     {
         void* copy = ScriptHeap::get().dupString(std::string((const char*)data, size));
@@ -233,15 +165,10 @@ void ckpt_device_seal(struct ParseState* Parser, struct Value* ReturnValue, stru
         return;
     }
 
-    // Which console source to record. Asking for Best tells us which one
-    // actually answers; deriveKey then asks that one by name, exactly as unseal
-    // will. The bytes from this probe are thrown away rather than passed along,
-    // so no console key material is held across the derivation.
     uint8_t probe[kKeySize];
     int source = ScriptHost::get().deviceSecret(probe, DeviceKeySourceBest);
     mbedtls_platform_zeroize(probe, sizeof(probe));
-    // A console with no usable source still seals when the user set a
-    // passphrase; with neither half deriveKey below refuses.
+
     if (source < 0) {
         source = DeviceKeySourceNone;
     }
@@ -296,7 +223,6 @@ void ckpt_device_unseal(struct ParseState* Parser, struct Value* ReturnValue, st
         return;
     }
 
-    // The source the blob was made with, not the best one available now.
     uint8_t key[kKeySize];
     if (!deriveKey((int)blob[kOffSource], passphrase, blob + kOffSalt, getU32(blob + kOffIters), key)) {
         mbedtls_platform_zeroize(key, sizeof(key));
@@ -317,9 +243,7 @@ void ckpt_device_unseal(struct ParseState* Parser, struct Value* ReturnValue, st
     mbedtls_platform_zeroize(key, sizeof(key));
 
     if (rc != 0) {
-        // GCM verified the tag before we got here, so nothing that failed is
-        // handed to the script — a wrong passphrase cannot yield garbage the
-        // script would then treat as its config.
+
         mbedtls_platform_zeroize(&plain[0], plain.size());
         ReturnValue->Val->Integer = SealAuthFailed;
         return;

@@ -101,8 +101,6 @@ void TransferJob::start(void)
         return;
     }
 
-    // Sends drive TransferStatus themselves (beginNetwork inside sendBackup);
-    // only local copies use the batch counter / bottom modal.
     if (anyLocal) {
         TransferStatus::beginLocalBatch(total);
     }
@@ -123,16 +121,12 @@ void TransferJob::run(void)
 {
     size_t done = 0;
 
-    // Accumulate the batch outcome in locals; a later item's success must not
-    // erase an earlier failure. We keep the first failing item's result and,
-    // if nothing failed, the last item's (all-success) result.
     JobResult firstFailure;
     bool haveFailure = false;
     JobResult lastResult;
     size_t failed = 0;
     size_t total  = 0;
-    // Collected across the batch, not taken from one item: the success message
-    // comes from the last item, the file that was left out may be in any of them.
+
     std::vector<std::string> skippedInUse;
 
     for (;;) {
@@ -160,8 +154,6 @@ void TransferJob::run(void)
         else {
             TransferStatus::setSaveCount(done);
 
-            // Only a backup item's sink reads the global cancel flag, so a restore
-            // can never abort mid-copy and leave a half-written save on the cartridge.
             UiProgressSink sink(item.op == Kind::Backup);
             BackupTarget target = item.title.backup(item.kind);
             io::IoOutcome out   = item.op == Kind::Restore ? io::restore(target, item.path, sink) : io::backup(target, item.path, sink);
@@ -194,8 +186,7 @@ void TransferJob::run(void)
         done++;
 
         if (current.cancelled) {
-            // A cancel ends the whole batch, not just the save mid-copy: drop
-            // everything still queued so the modal closes on this result.
+
             std::lock_guard<std::mutex> lock(mMutex);
             mQueue.clear();
             break;

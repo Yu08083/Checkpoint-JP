@@ -27,12 +27,6 @@
 #include "progress.hpp"
 #include "transferstatus.hpp"
 
-// UiProgressSink runs on the TransferJob worker thread: every call only mirrors
-// figures into TransferStatus. It does not render — the main loop draws the
-// transfer modal from TransferStatus::snapshot() every frame, so the clock and
-// the rest of the UI keep animating while the copy runs on the worker. The batch
-// active flag is owned by TransferStatus::beginLocalBatch / end, raised and
-// lowered by the TransferJob around the whole batch.
 void UiProgressSink::begin(const std::string& mode, size_t totalFiles)
 {
     TransferStatus::beginLocalRun(mode, totalFiles);
@@ -55,13 +49,11 @@ void UiProgressSink::finishFile()
 
 void UiProgressSink::end()
 {
-    // No-op: the batch active flag is lowered by the TransferJob once the whole
-    // batch finishes, not after each save's file run.
+
 }
 
 bool UiProgressSink::cancelled() const
 {
-    // Only a backup run reads the global cancel flag; a restore's sink is built
-    // non-cancellable so the shared copy loops never abort mid-restore.
+
     return mCancellable && TransferStatus::cancelRequested();
 }

@@ -30,38 +30,19 @@
 #include <initializer_list>
 #include <string>
 
-// Runtime string localization. One flat JSON per project (romfs:/i18n.json)
-// maps key -> { lang -> text }. Lookups happen live at every call so any
-// string fetched per frame updates instantly on setLanguage. See HANDOFF-i18n.md.
 namespace i18n {
-    // Parse the romfs json once at boot. Safe to call before setLanguage. A
-    // parse failure leaves the table empty and every t() falls back to the key.
+
     bool init(const std::string& path);
 
-    // Only "en", "it", "es", "fr", "de", "pt", "nl", "ja", "zh" and "ru" are accepted; anything else falls back to "en".
     void setLanguage(const std::string& code);
     const std::string& language(void);
 
-    // Lookup with fallback chain: current lang -> "en" -> the key itself.
-    // A visible "settings.general.title" on screen flags a missing entry.
     std::string t(const std::string& key);
 
-    // Placeholder substitution: replaces "{0}", "{1}", ... with args. Args are
-    // pre-stringified by the caller (this does no printf). Indexed placeholders
-    // let a translation reorder arguments relative to English.
     std::string t(const std::string& key, std::initializer_list<std::string> args);
 
-    // True when the table has an entry for `key`. t() deliberately echoes the key
-    // on a miss, which is right for display but useless to a caller that wants to
-    // fall back to something of its own.
     bool has(const std::string& key);
 
-    // Localizes a transfer mode tag for display. The tags ("Backup", "Restore",
-    // "Clearing", ...) are set by the io/transfer layers and doubled as
-    // identifiers the UI compares against, so they stay raw everywhere except
-    // here: `tag` maps to "main.mode.<tag lowercased, spaces to underscores>".
-    // A tag with no entry — or a mode string that is already localized, like the
-    // download label — comes back unchanged.
     std::string transferMode(const std::string& tag);
 }
 

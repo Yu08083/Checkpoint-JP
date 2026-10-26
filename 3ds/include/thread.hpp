@@ -37,9 +37,6 @@
 namespace Threads {
     inline constexpr int MAX_THREADS = 32;
 
-    // 16KB proved too small: the cart-scan thread overflowed it during a DS cart
-    // probe (SPI retries + Logging's format/iostream/strftime chain) and smashed
-    // the thread's newlib reent, which libctru places directly below the stack.
     inline constexpr size_t DEFAULT_STACK = 0x8000;
     inline constexpr size_t WORKER_STACK  = 0x8000;
 
@@ -50,10 +47,8 @@ namespace Threads {
         return init(workers, workers);
     }
 
-    // stackSize will be ignored on systems that don't provide explicit setting of it. KEEP THIS IN
-    // MIND IF YOU ARE PORTING
     bool create(void (*entrypoint)(void*), void* arg = nullptr, std::optional<size_t> stackSize = std::nullopt);
-    // Executes task on a worker thread with stack size of 0x8000 (if settable).
+
     void executeTask(void (*task)(void*), void* arg);
 
     namespace internal {
@@ -76,7 +71,6 @@ namespace Threads {
                 static_cast<void*>(new tuple_type(std::forward<decltype(entrypoint)>(entrypoint), std::forward<decltype(args)>(args)...))};
         }
 
-        // Convert any function refs to function pointers
         template <typename EPFunc, typename... Args>
         std::pair<void (*)(void*), void*> getFuncAndArg(EPFunc&& entrypoint, Args&&... args)
             requires std::is_function_v<std::remove_cvref_t<EPFunc>> && std::is_reference_v<EPFunc>
@@ -84,8 +78,6 @@ namespace Threads {
             return getFuncAndArg(std::addressof(entrypoint), std::forward<decltype(args)>(args)...);
         }
 
-        // Optimization for pointer-to-member-func with object arg or pointer to
-        // function with single pointer arg
         template <typename EPFunc, typename Arg>
         std::pair<void (*)(void*), void*> getFuncAndArg(EPFunc&& entrypoint, Arg&& a)
             requires std::invocable<EPFunc, Arg> &&
@@ -96,7 +88,6 @@ namespace Threads {
             return {reinterpret_cast<void (*)(void*)>(entrypoint), reinterpret_cast<void*>(a)};
         }
 
-        // Optimization for zero-arg pointer to func (or empty capture lambda)
         template <typename EPFunc>
         std::pair<void (*)(void*), void*> getFuncAndArg(EPFunc&& entrypoint)
             requires std::invocable<EPFunc> && std::is_convertible_v<EPFunc, std::invoke_result_t<EPFunc> (*)()> &&
@@ -106,7 +97,6 @@ namespace Threads {
                 reinterpret_cast<void*>(static_cast<std::invoke_result_t<EPFunc> (*)()>(entrypoint))};
         }
 
-        // Optimization for non-empty captures lambda (or other stateful functor)
         template <typename EPFunc>
         std::pair<void (*)(void*), void*> getFuncAndArg(EPFunc&& entrypoint)
             requires std::invocable<EPFunc> &&
@@ -134,7 +124,7 @@ namespace Threads {
 
         template <typename MF>
         using member_pointer_class_t = typename member_pointer_class<MF>::type;
-    } // namespace internal
+    }
 
     template <typename EPFunc, typename... Args>
     bool create(std::optional<size_t> stackSize, EPFunc&& entrypoint, Args&&... args)

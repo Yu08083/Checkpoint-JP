@@ -141,9 +141,6 @@ namespace {
             return true;
         }
 
-        // Reads the save's first page into `into` twice, second copy through
-        // `scratch`, and requires the two to agree. A wrong read here would turn
-        // a write meant to preserve bytes into one that destroys them.
         bool readPageAt(u32 window, u32 firstSector, u32* into, u32* scratch, const char* step) const
         {
             if (!syncedSentinel(step)) {
@@ -174,9 +171,6 @@ namespace {
         bool readPage(u32* into, u32* scratch, const char* step) const { return readPageAt(0, 0, into, scratch, step); }
     };
 
-    // Asking Process9 for the ROM header again is how every gate proves the card
-    // controller still works after ARM11 borrowed it: a matching game code means
-    // Process9's own card IO recovered.
     bool process9RecoveryOk(FS_MediaType media, const DSCard::NandSave& nandSave, Result& result)
     {
         std::array<u8, DSCard::headerSize> header{};
@@ -211,7 +205,6 @@ namespace {
         return readiness;
     }
 
-    // the middle of the one stretch this code needs kept free of it.
     struct DumpEvent {
         u32 window                                  = 0;
         u32 sector                                  = 0;
@@ -266,19 +259,6 @@ namespace {
         }
     }
 
-    // Dump the whole on-cart NAND save, one bounded 128-KiB window at a time.
-    // Each window is an independent B2/B7.../8B sequence that leaves the
-    // cartridge in ROM mode and the controller restored, so the bus is never
-    // held across the work that follows it. Read-only throughout: no NAND
-    // program, commit, or write-enable command exists anywhere in this path.
-    //
-    // By default the whole save lands in RAM and the SD file is created and
-    // written only after the last window, because every filesystem call is
-    // Process9 work on the controller being driven and six hardware runs all
-    // lost the slot within about 1.3 s of card activity. This is what makes
-    // that measurement mean something: a run with no filesystem traffic in it
-    // either survives, which indicts Checkpoint's own IO, or fails at the same
-    // point, which rules software policy out entirely.
     DSCardNand::DumpOutcome runDump(FS_MediaType media, const DSCard::NandSave& nandSave, const NtrCard::NandSectorReadResult& gateThreeSector,
         const std::u16string& path, const std::string& name, ProgressSink& sink)
     {
@@ -302,9 +282,6 @@ namespace {
             return outcome;
         }
 
-        // The RAM image is one allocation the size of the save. If it cannot be
-        // had, fall back to streaming a window at a time rather than skipping
-        // the dump: a streamed dump is still the previously tested behaviour.
         std::unique_ptr<u32[]> image(new (std::nothrow) u32[nandSave.saveSize / sizeof(u32)]);
         if (!image) {
             Logging::error(
@@ -324,8 +301,6 @@ namespace {
             }
         }
 
-        // One file of the save's size: the window loop below reports absolute
-        // byte offsets into it as each window is accepted.
         sink.begin("Backup", 1);
         sink.startFile(StringUtils::UTF8toUTF16(name.c_str()), nandSave.saveSize);
         bool cancelled = false;
@@ -335,21 +310,13 @@ namespace {
             name, nandSave.rwStart, nandSave.saveSize, windows, ramMode ? "ram" : "sd-stream", blockSectors,
             gateThreeSector.commandReadbackAvailable ? "yes" : "no", romControl);
 
-        // Short runs, not one long ownership
         constexpr u32 sectorsPerBurst = 32;
         constexpr u32 maxBurstRetries = 16;
-        // A controller that reports the same busy ROMCNT this many times in a
-        // row is not contended, it is wedged: an abandoned transfer whose FIFO
-        // nobody drained. Repair is bounded and rare by construction.
+
         constexpr u32 stallRepairThreshold = 4;
         constexpr u32 maxStallRepairs      = 8;
         static_assert(NtrCard::nandWindowSectors % sectorsPerBurst == 0);
 
-        // No read is ever accepted on faith. A second, independent B2/B7.../8B
-        // sequence must return identical bytes before the first copy becomes
-        // part of the image. Run 16 produced silent, high-entropy corruption
-        // starting at word 100 of one sector while all existing controller
-        // guards still reported success.
         auto verificationBuffer = std::make_unique<u32[]>(sectorsPerBurst * NtrCard::sectorWords);
 
         std::array<DumpEvent, 24> events{};
@@ -367,10 +334,6 @@ namespace {
         std::array<NtrCard::StalledControllerRecovery, maxStallRepairs> repairs{};
         u32 repairCount = 0;
 
-        // A host reset is no longer the end of a dump. Two runs put Process9's
-        // cartridge poll at 715 ms and 712 ms, and it takes two of them to reset
-        // the slot, so a 16-MiB dump cannot outrun it and has to survive it
-        // instead. Recovery is bounded per dump and every attempt is recorded.
         constexpr u32 maxResetRecoveries = 64;
 
         SHA256_CTX context;
@@ -388,7 +351,7 @@ namespace {
         u32 drained              = 0;
         u32 done                 = 0;
         u32 foreignIdle          = 0;
-        // How many times the bus refused to go quiet after a recovery.
+
         u32 busQuietWaits = 0;
 
         u32 pollSyncs                                  = 0;
@@ -515,15 +478,9 @@ namespace {
                             break;
                         }
 
-                        // Route a failed verification transfer through the
-                        // same reporting and safety logic as the first copy.
                         read = std::move(verification);
                     }
 
-                    // Process9 taking MCNT is retryable only after 8B recovered
-                    // ROM mode. A non-reset failure before command issue is mere
-                    // contention: no window was selected, so repeating is
-                    // harmless. Reset is still a hard stop.
                     const bool contendedStart = read->stage == NtrCard::NandReadStage::Preflight &&
                                                 read->status != NtrCard::SectorReadStatus::InvalidArgument &&
                                                 read->status != NtrCard::SectorReadStatus::ControllerReset;
@@ -564,11 +521,6 @@ namespace {
                     event.returnTransfer           = read->returnTransferRomControl;
                     event.returnCompleted          = read->returnCompletedRomControl;
 
-                    // A busy controller that never changes is the signature the
-                    // last four hardware runs died on: BUSY and data-ready set,
-                    // byte-identical across every retry, unmoved by an FS slot
-                    // power cycle. That is an abandoned transfer whose FIFO
-                    // nobody drained, so drain it instead of retrying into it.
                     if (read->status == NtrCard::SectorReadStatus::ControllerBusy && read->stage == NtrCard::NandReadStage::Preflight) {
                         if (stallStreak != 0 && read->observedRomControl == stallRomControl) {
                             stallStreak++;
@@ -589,14 +541,6 @@ namespace {
                         stallStreak = 0;
                     }
 
-                    // A reset leaves the cartridge in its power-on ROM mode, so
-                    // nothing is damaged and the burst can simply be done again
-                    // -- once Process9 has put the cartridge back into main data
-                    // mode, which is the one thing this module cannot do itself.
-                    // A collision after synchronising to the poll means the
-                    // assumed quiet phase is false or already exhausted. Do not
-                    // stretch this window into the next 713-ms detector slot by
-                    // recovering and retrying inside it.
                     bool retryable = false;
                     if (retryable && attempt - forgivenAttempts < maxBurstRetries) {
                         record(event);
@@ -621,10 +565,7 @@ namespace {
                 firstSectorChecked = true;
                 firstSectorMatches = std::memcmp(target, gateThreeSector.data.data(), NtrCard::sectorSize) == 0;
                 if (!firstSectorMatches) {
-                    // Every command reported success and the bytes are still
-                    // wrong, so windowed addressing or the cartridge's own state
-                    // is wrong. Reading 127 more windows of that and hashing it
-                    // would only make the wrong answer look thorough.
+
                     complete = false;
                     break;
                 }
@@ -643,54 +584,23 @@ namespace {
             done++;
             sink.advanceBytes(done * (u32)NtrCard::nandWindowSize);
 
-            // Hand the CPU to the UI thread for one frame.
-            //
-            // waitForCardPoll is a tight spin with no yield in it -- it has to
-            // be, because Process9's cartridge poll is a transfer a few hundred
-            // microseconds long and sampling it loosely would miss it -- and it
-            // runs about half a second per window. This thread is created at
-            // prio - 1, so it outranks the main thread, and 128 windows of that
-            // spin froze the transfer modal solid for a whole 64-second dump:
-            // no clock, no progress bar, just a full bar at the end.
-            //
-            // Sleeping here rather than anywhere else is what makes it safe.
-            // The cartridge is in ROM mode with the controller restored, so a
-            // poll that lands during this sleep is a good poll, not one of the
-            // two bad ones that reset the slot. Phase is not carried across
-            // windows either: the next window re-establishes it from scratch,
-            // so arriving late costs time and nothing else. About 5 ms against
-            // a 64-second dump, and the modal gets a frame per window.
             svcSleepThread(5'000'000);
 
-            // Between windows the cartridge is back in ROM mode and the
-            // controller is restored, so this is the only point in the loop
-            // where stopping costs nothing. Cancelling between two card
-            // commands would leave the cartridge in NAND RW mode, which is
-            // exactly the state that needs a console power cycle, so the flag
-            // is read here and nowhere else.
             if (sink.cancelled()) {
                 cancelled = true;
                 complete  = false;
                 break;
             }
 
-            // The cartridge is in ROM mode here and the controller is restored,
-            // so this is the one safe moment to hand Process9 a good read of the
-            // cartridge and clear whatever its poll made of the last one.
         }
 
         const u32 cardElapsed = (u32)(osGetTime() - started);
 
-        // The cartridge is released from here on, so the filesystem and the log
-        // are free again. A cancelled run skips this entirely: its RAM image is
-        // a prefix of a save, and a prefix must never reach the SD card looking
-        // like one.
         if (ramMode && !cancelled) {
             output = std::make_unique<FSStream>(Archive::sdmc(), path, FS_OPEN_WRITE, nandSave.saveSize);
             if (!output->good()) {
                 Logging::error("NTRCARD NAND dump read {} windows but failed to open {} with result 0x{:08X}.", done, name, (u32)output->result());
-                // Dropped rather than closed: a stream that never opened has no
-                // handle to close.
+
                 output.reset();
                 complete = false;
             }
@@ -804,10 +714,6 @@ namespace {
             outcome.status = DSCardNand::DumpStatus::ReadFailed;
         }
 
-        // An image that stopped early is a prefix of a save, and three earlier
-        // builds proved how convincing a wrong image can look. Nothing partial
-        // is left behind for a later restore to find; the log keeps every
-        // counter and hash the failure needs to be diagnosed from.
         if (!outcome.ok() && io::fileExists(Archive::sdmc(), path)) {
             const Result removeResult = FSUSER_DeleteFile(Archive::sdmc(), fsMakePath(PATH_UTF16, path.data()));
             if (R_FAILED(removeResult)) {
@@ -850,9 +756,6 @@ DSCardNand::Session DSCardNand::prepare(FS_MediaType media, const DSCard::NandSa
         return session;
     }
 
-    // Read one ordinary ROM sector and prove it against the banner FS
-    // already handed us. Until direct reads and Process9 agree on the same
-    // bytes, nothing may address the save.
     const auto probe = NtrCard::readMappedMainModeSector(nandSave.bannerOffset, nandSave.cardControl13);
     if (!probe) {
         Logging::error("NTRCARD ROM read probe unavailable; use the installed CIA.");
@@ -936,8 +839,6 @@ DSCardNand::Session DSCardNand::prepare(FS_MediaType media, const DSCard::NandSa
     const bool nandProcess9Works = process9RecoveryOk(media, nandSave, verifyResult);
     Logging::info("NTRCARD NAND Process9 recovery probe: result=0x{:08X}, game-code-match={}.", (u32)verifyResult, nandProcess9Works ? "yes" : "no");
 
-    // The single-sector sequence must have completed, and Process9 must have
-    // recovered from it in this same launch, before anything walks the save.
     session.sentinel = *nandProbe;
     session.ready = readComplete && nandProbe->stage == NtrCard::NandReadStage::Complete && nandProcess9Works && NtrCard::mappedCardAccessAvailable();
     session.requiresPowerCycle = !readComplete && nandProbe->stage != NtrCard::NandReadStage::Preflight &&
@@ -959,7 +860,6 @@ DSCardNand::DumpOutcome DSCardNand::dumpToFile(
         return outcome;
     }
 
-    // The log names the file, so give it the leaf rather than the whole path.
     const std::size_t leaf    = path.find_last_of(u'/');
     const std::u16string tail = leaf == std::u16string::npos ? path : path.substr(leaf + 1);
     return runDump(media, nandSave, session.sentinel, path, StringUtils::UTF16toUTF8(tail), sink);
@@ -980,10 +880,6 @@ namespace {
         const u32 romControl = NtrCard::tunedRomControl(nandSave.cardControl13);
         const u32 windows    = nandSave.saveSize / NtrCard::nandWindowSize;
 
-        // A restore reads its source once, in full, before it touches the
-        // cartridge. Streaming it would mean going back to the filesystem
-        // between card commands, and the whole reason this path is trustworthy
-        // is that nothing else runs between the poll and the commit.
         std::unique_ptr<u32[]> image(new (std::nothrow) u32[nandSave.saveSize / sizeof(u32)]);
         if (!image) {
             Logging::error("NTRCARD NAND restore skipped: could not reserve 0x{:08X} bytes of RAM for the source image.", nandSave.saveSize);
@@ -1050,16 +946,9 @@ namespace {
         u32 statusPollsMax     = 0;
         u32 resets             = 0;
 
-        // How much card work one poll-synchronised interval may hold. Process9's
-        // cartridge poll comes about every 713 ms; a page write measured 3 ms
-        // and its read-back 7 ms across 8192 pages on 2026-08-29, so 300 ms of
-        // budget fills a fraction of a quiet period and still batches a dozen
-        // pages into it.
         constexpr u64 ticksPerMs       = SYSCLOCK_ARM11 / 1000;
         constexpr u64 writeBudgetTicks = 300 * ticksPerMs;
-        // Floor under the per-page reserve until the run has measured its own
-        // worst case. 120 ms is twice the slowest page ever observed and still
-        // leaves most of a poll period unused.
+
         constexpr u64 minimumReserveTicks = 120 * ticksPerMs;
         u64 slowestBatchedPageTicks       = 0;
         u32 batches                       = 0;
@@ -1092,14 +981,6 @@ namespace {
             return true;
         };
 
-        // One poll-synchronised pass over a whole window, read in the dump's
-        // 32-sector bursts rather than one 256-sector run. That burst size is
-        // not a tuning choice: Gate 4's first hardware attempt lost the
-        // controller 134 sectors into a 256-sector run, and the unit of work has
-        // been sized to bound what one collision costs ever since. Each burst is
-        // read twice and bracketed by the trusted sentinel, exactly as the dump
-        // accepts bytes, because what the cartridge currently holds decides what
-        // gets written.
         constexpr u32 sectorsPerBurst = 32;
         static_assert(NtrCard::nandWindowSectors % sectorsPerBurst == 0);
 
@@ -1155,17 +1036,14 @@ namespace {
             const u32 pageOffset  = nandSave.rwStart + window * (u32)NtrCard::nandWindowSize + page * (u32)NtrCard::nandPageSize;
             const u32 firstSector = page * (u32)NtrCard::nandPageSectors;
 
-            // Sentinel before every card operation either way; the poll wait is
-            // the only thing a batched page skips, because the caller took it.
             const auto bracket = [&](const char* step) {
                 if (ownInterval) {
-                    // GuardedPage keeps no counters of its own, so count here.
+
                     sentinelChecks++;
                     pollSyncs++;
                     return guarded.syncedSentinel(step);
                 }
-                // verifyTrustedSentinel counts itself; counting again here would
-                // report three checks per page as six.
+
                 return verifyTrustedSentinel();
             };
 
@@ -1195,20 +1073,12 @@ namespace {
                 return false;
             }
 
-            // Read back twice, each in its own poll-synchronised, sentinel-
-            // bracketed interval, and require the two to agree before either is
-            // compared with the source. Run 16 produced a single read that
-            // completed, reported success, and returned wrong bytes; one read
-            // agreeing with the source could be that read failing in the
-            // direction that happens to look like success.
             const auto readOnce = [&](u32* into, const char* step) {
                 if (sentinelSurvives && !bracket(step)) {
                     return false;
                 }
                 if (!sentinelSurvives && ownInterval) {
-                    // No sentinel to check -- page 0 no longer holds it -- but the
-                    // poll still has to be waited for when this page owns its
-                    // interval.
+
                     pollSyncs++;
                     const auto sync = NtrCard::waitForMappedCardPoll();
                     if (!sync || sync->status != NtrCard::CardPollStatus::Observed) {
@@ -1245,7 +1115,6 @@ namespace {
             return true;
         };
 
-        // Where a page's wanted bytes live in the source image.
         const auto sourcePage = [&](u32 window, u32 page) {
             return image.get() + static_cast<std::size_t>(window) * NtrCard::nandWindowWords +
                    static_cast<std::size_t>(page) * NtrCard::nandPageWords;
@@ -1253,8 +1122,6 @@ namespace {
 
         const u64 started = osGetTime();
 
-        // Window 0's page 0 is deferred: its first sector is the trusted
-        // sentinel, so writing it here would break every check that follows.
         constexpr u32 deferredPage = 0;
         bool deferredPageNeeded    = false;
 
@@ -1265,9 +1132,6 @@ namespace {
                 break;
             }
 
-            // Which pages of this window actually need writing. Deciding first
-            // and writing second is what lets a batch know, before it starts,
-            // how much work it is about to do.
             std::array<u32, pagesPerWindow> pending{};
             u32 pendingCount = 0;
             for (std::size_t page = 0; page < pagesPerWindow; page++) {
@@ -1299,13 +1163,7 @@ namespace {
                 const u64 batchStarted = svcGetSystemTick();
                 u32 batched            = 0;
                 while (index < pendingCount) {
-                    // Never start a page that could run past the budget. The
-                    // reserve is a measured worst case, not an average: the
-                    // slowest page seen so far, with a floor under it for the
-                    // first few pages of a run when nothing has been measured
-                    // yet. The budget itself is well inside a poll period, so a
-                    // page that overruns its estimate still lands in the quiet
-                    // part of one.
+
                     const u64 elapsed = svcGetSystemTick() - batchStarted;
                     const u64 reserve = slowestBatchedPageTicks > minimumReserveTicks ? slowestBatchedPageTicks : minimumReserveTicks;
                     if (batched != 0 && elapsed + reserve > writeBudgetTicks) {
@@ -1336,10 +1194,6 @@ namespace {
             outcome.windowsDone++;
             sink.advanceBytes(outcome.windowsDone * (u32)NtrCard::nandWindowSize);
 
-            // The cartridge is in ROM mode with the controller restored here, so
-            // this is the one point in the loop where yielding a frame to the UI
-            // and reading the cancel flag cost nothing. Stopping between two
-            // card commands would leave the cartridge in NAND RW mode.
             svcSleepThread(5'000'000);
             if (sink.cancelled()) {
                 cancelled = true;
@@ -1348,7 +1202,6 @@ namespace {
             }
         }
 
-        // Page 0 last, alone, and only if it differs
         bool deferredPageWritten = false;
         if (complete && deferredPageNeeded) {
             if (!writePage(0, deferredPage, image.get(), false)) {

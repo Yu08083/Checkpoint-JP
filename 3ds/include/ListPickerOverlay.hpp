@@ -31,11 +31,6 @@
 #include "hid.hpp"
 #include <string>
 
-// Deep home of the full-screen list-picker chrome: top-screen backdrop + card,
-// prompt header with "n / total" counter, separator, per-row selection
-// highlight, and the bottom-screen hint line. Subclasses supply the rows and
-// the input policy; TitlePickerOverlay and FolderBrowserOverlay are thin
-// configurations over this chrome.
 class ListPickerOverlay : public Overlay {
 public:
     void drawTop(void) const override;
@@ -43,15 +38,13 @@ public:
 
 protected:
     static constexpr size_t VISIBLE = 6;
-    // Overlay text draws above the screen content layer.
+
     static constexpr float OVERLAY_Z = 0.6f;
 
-    // `listTop` is the y of the first row (the separator sits 6px above it),
-    // `rowH` the row pitch, `hintScale` the bottom hint text scale.
     ListPickerOverlay(Screen& screen, const std::string& prompt, int listTop, int rowH, float hintScale);
 
     virtual int rowCount(void) const = 0;
-    // Extra header content between the prompt and the separator (e.g. a path).
+
     virtual void drawHeaderExtra(void) const {}
     virtual void drawEmptyMessage(void) const                         = 0;
     virtual void drawRowContent(int k, int rowY, bool selected) const = 0;

@@ -31,7 +31,7 @@
 #include <unordered_map>
 
 namespace {
-    // key -> (lang -> text). Flattened at init so lookups never traverse json.
+
     std::unordered_map<std::string, std::unordered_map<std::string, std::string>> sTable;
     std::string sLanguage = "en";
 
@@ -50,8 +50,7 @@ bool i18n::init(const std::string& path)
     if (in == nullptr) {
         return false;
     }
-    // Never crash on a malformed i18n.json: parse non-throwing, fall back to
-    // key-echo (empty table) on any error, mirroring configuration.cpp.
+
     nlohmann::json j = nlohmann::json::parse(in, nullptr, false);
     fclose(in);
 
@@ -97,7 +96,7 @@ std::string i18n::t(const std::string& key)
             return en->second;
         }
     }
-    // Missing entry: echo the key so it is visible on screen as a flag.
+
     return key;
 }
 
@@ -105,8 +104,6 @@ std::string i18n::t(const std::string& key, std::initializer_list<std::string> a
 {
     std::string result = t(key);
 
-    // Replace each "{i}" token with args[i]. Single left-to-right pass per index
-    // so a substituted value that itself contains braces is never re-expanded.
     size_t index = 0;
     for (const auto& arg : args) {
         const std::string token = "{" + std::to_string(index) + "}";

@@ -38,8 +38,6 @@ Directory::Directory(FS_Archive archive, const std::u16string& root)
         return;
     }
 
-    // Read entries in batches to amortize the FS service round-trip: one IPC call
-    // per BATCH entries instead of one per entry.
     static constexpr u32 BATCH = 32;
     FS_DirectoryEntry batch[BATCH];
     u32 result;

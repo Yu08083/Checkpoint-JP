@@ -48,8 +48,7 @@ UpdateOverlay::UpdateOverlay(Screen& screen, const AutoUpdater::Update& update, 
             job->outcome                       = outcome;
             job->finished.store(true, std::memory_order_release);
         })) {
-        // No worker, no transfer: report the failure through the same path the
-        // worker would have taken rather than leaving the bar up forever.
+
         Logging::warning("Could not start the update worker thread.");
         mJob->finished.store(true, std::memory_order_release);
     }
@@ -67,8 +66,7 @@ void UpdateOverlay::drawBottom(void) const
     TextPool::get().draw(mText, mPosx, mLayout.textY, SIZE, COLOR_TEXT);
 
     const AutoUpdater::Progress p = AutoUpdater::progress();
-    // No total yet (headers still in flight) leaves the trough empty rather
-    // than guessing a fraction.
+
     const float frac = p.total > 0 ? (float)p.downloaded / (float)p.total : 0.0f;
 
     char bytes[48];
@@ -77,11 +75,8 @@ void UpdateOverlay::drawBottom(void) const
     snprintf(pct, sizeof(pct), "%d%%", (int)((frac > 1.0f ? 1.0f : frac) * 100));
     Gui::drawProgressBar(ModalChrome::BTN_WIDE_X, mLayout.btnY + 2, ModalChrome::BTN_WIDE_W, 8, frac, bytes, pct);
 
-    // Once the bytes are down the console is writing the artifact into place,
-    // which reports nothing: say so instead of parking a full bar.
     const std::string hint = (p.total > 0 && p.downloaded >= p.total) ? i18n::t("updater.installing") : i18n::t("updater.keep_awake");
-    // The bar's own byte / percent labels sit just under the trough, so the
-    // hint clears their line rather than printing on top of it.
+
     TextPool::get().drawCentered(hint, ModalChrome::CARD_X, ModalChrome::CARD_W, mLayout.btnY + 28, 0.42f, COLOR_FAINT);
 }
 
@@ -93,9 +88,7 @@ void UpdateOverlay::update(const InputState& input)
     }
 
     if (mJob->outcome == AutoUpdater::Outcome::Installed) {
-        // Leave the modal up: main() ends the loop on this call, so the last
-        // frame the user sees is the finished transfer rather than a flash of
-        // the title grid.
+
         if (mOnInstalled) {
             mOnInstalled();
         }

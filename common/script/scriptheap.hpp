@@ -32,34 +32,9 @@
 #include <string>
 #include <unordered_map>
 
-// Run-scoped ownership for the native memory a script touches.
-//
-// A run ends in one of four ways: a normal return, exit(), a parse/runtime
-// error, or the hold-B abort. Only the first runs the script's own free()
-// calls — the other three longjmp straight to the exit point. So a script's
-// free() can never be the thing that reclaims memory, and before this module
-// every char*, every struct directory and every json tree survived an aborted
-// run for the lifetime of the process.
-//
-// Everything a run allocates natively is registered here instead: the script's
-// malloc/calloc/realloc (picoc's stdlib routes through the C shim in
-// scriptheap_c.h), the strings bindings return, and the json trees json_new
-// hands out. ScriptRunner::run() calls releaseAll() after the run, next to
-// ckpt_sav_close_all(), so the last exit path is as clean as the first.
-//
-// The script-facing contract is unchanged: free() and json_delete() still work,
-// they just stop being load-bearing — each is a release() that untracks the
-// block, so releaseAll() cannot double-free what the script already returned.
-// A free() of something this heap does not own (a borrowed json element, a
-// second free of the same pointer) is ignored rather than corrupting the heap.
-//
-// Threading: bindings run on the script worker, releaseAll() runs on the same
-// thread once the worker's interpreter has returned. The mutex is there because
-// the map is a process-lifetime singleton, not because two threads race for it.
 class ScriptHeap {
 public:
-    // A block's destroy function. Blocks are mostly malloc'd bytes, but a json
-    // tree needs `delete`, so ownership carries the way to end it.
+
     using Deleter = void (*)(void*);
 
     static ScriptHeap& get(void)
@@ -68,28 +43,17 @@ public:
         return heap;
     }
 
-    // malloc/calloc/realloc, tracked. Null on failure, exactly like the
-    // functions they stand in for; realloc(nullptr, n) is alloc(n).
     void* alloc(size_t size);
     void* allocZeroed(size_t count, size_t size);
     void* reallocate(void* ptr, size_t size);
 
-    // A NUL-terminated, tracked copy of `str` — the one form every binding that
-    // returns a string to a script uses. Embedded NULs survive: the copy is
-    // size() + 1 bytes, so it doubles as the response-body buffer web_get and
-    // friends hand back with an explicit length.
     void* dupString(const std::string& str);
 
-    // Take ownership of a block this heap did not allocate (a `new`ed json
-    // tree). `deleter` is called with `ptr` at release time.
     void adopt(void* ptr, Deleter deleter);
 
-    // Destroy one block. False (and nothing happens) if the heap does not own
-    // it — the caller decides whether that is a script error or a no-op.
     bool release(void* ptr);
     bool owns(void* ptr) const;
 
-    // Destroy everything left. Called once per run, whatever the exit path.
     void releaseAll(void);
 
     size_t liveBlocks(void) const;
@@ -101,10 +65,6 @@ private:
     std::unordered_map<void*, Deleter> mBlocks;
 };
 
-// Every binding that returns a string to a script goes through this: a
-// run-scoped copy the interpreter sees as an ordinary char*. Used unqualified
-// from the bindings in both checkpoint_api.cpp copies and from json/web_api,
-// which is why it is a free function and not a static member.
 inline void* strToRet(const std::string& str)
 {
     return ScriptHeap::get().dupString(str);

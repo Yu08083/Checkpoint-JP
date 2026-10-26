@@ -48,8 +48,7 @@ void pumpScriptRequests(ScriptUiBridge& bridge, ScriptRequestSink& sink)
             break;
         case UiRequest::Kind::Keyboard: {
             UiResponse resp;
-            // maxChars counts the terminator; the keyboards want the room left
-            // for text, and 0 means "the platform's own default".
+
             resp.text = sink.keyboard(req->prompt, req->maxChars > 0 ? (size_t)req->maxChars - 1 : 0);
             bridge.respond(std::move(resp));
             break;

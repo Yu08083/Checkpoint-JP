@@ -72,8 +72,7 @@ void Clickable::draw(float size, u32 overlayWhenFocused)
         g = 0;
         b = 0;
     }
-    // Localized labels can outgrow the box: shrink the scale a little first
-    // (down to 80%), then ellipsis-truncate whatever still overflows.
+
     const float availWidth    = mCentered ? mw - 8 : mw - 16;
     const float drawSize      = TextPool::get().fitScale(text(), availWidth, size, size * 0.8f);
     const std::string message = TextPool::get().truncate(text(), availWidth, drawSize);

@@ -33,20 +33,13 @@
 #include <3ds.h>
 #include <utility>
 
-// Which backup facet of a Title we are acting on. The UI selects the kind once
-// and hands it to the code that needs it; there is no global mode flag.
 enum class BackupKind { Save, Extdata };
 
-// RAII owner of an opened archive that hides whether it is backed by FSUSER
-// (FS_Archive) or FSPXI (FSPXI_Archive, used for raw GBA VC saves). Closes itself
-// the correct way on scope exit, so callers never write a close-lambda again.
 class ArchiveHandle {
 public:
     ArchiveHandle() = default;
     ~ArchiveHandle() { close(); }
 
-    // FS_Archive and FSPXI_Archive are the same underlying handle type, so these
-    // are named factories rather than overloaded constructors.
     static ArchiveHandle fromFs(FS_Archive a)
     {
         ArchiveHandle h;
@@ -81,9 +74,9 @@ public:
     ArchiveHandle& operator=(const ArchiveHandle&) = delete;
 
     explicit operator bool(void) const { return mValid; }
-    bool isRaw(void) const { return mRaw; }        // FSPXI-backed (raw GBA VC)
-    FS_Archive fs(void) const { return mFs; }      // valid when !isRaw()
-    FSPXI_Archive pxi(void) const { return mPxi; } // valid when isRaw()
+    bool isRaw(void) const { return mRaw; }
+    FS_Archive fs(void) const { return mFs; }
+    FSPXI_Archive pxi(void) const { return mPxi; }
     void close(void);
 
 private:
@@ -93,12 +86,6 @@ private:
     FSPXI_Archive mPxi = 0;
 };
 
-// An openable save-data archive of one kind: a regular CTR save, a raw GBA VC
-// save (FSPXI), or extdata. A value type tagged by kind (no heap, no virtual) so
-// it is cheap to spin up for every title during a load. It is the single place
-// that knows both how to open() a kind and whether it is accessible() (= can be
-// opened) — the open/probe duplication that used to live across Archive lives
-// here once per kind.
 class SaveDataSource {
 public:
     static SaveDataSource ctrSave(FS_MediaType media, u32 lowid, u32 highid);
@@ -115,8 +102,8 @@ private:
 
     Kind mKind;
     FS_MediaType mMedia;
-    u32 mA; // lowid (CtrSave/RawGba) or extdataId (Extdata)
-    u32 mB; // highid (CtrSave/RawGba); unused for Extdata
+    u32 mA;
+    u32 mB;
 };
 
 namespace Archive {
@@ -128,9 +115,7 @@ namespace Archive {
     Result save(FS_Archive* archive, FS_MediaType mediatype, u32 lowid, u32 highid);
     Result rawSave(FSPXI_Archive* archive, FS_MediaType mediatype, u32 lowid, u32 highid);
     Result extdata(FS_Archive* archive, u32 extdata);
-    // A DSiWare title's save lives as plain files (public.sav & co.) inside the
-    // TWL NAND FAT, not in its own archive: this is the title's data directory
-    // inside ARCHIVE_NAND_TWL_FS, with a trailing '/'.
+
     std::u16string twlSaveDataPath(u32 lowid, u32 highid);
 }
 

@@ -33,57 +33,39 @@
 #include <string>
 #include <vector>
 
-// The blocking request/response channel between a running script and the UI.
-// The script thread parks in request() until the main loop notices the pending
-// request (polled once per frame), raises the matching overlay, and hands the
-// user's answer back through respond(). No UI types on purpose: this is the
-// platform-neutral seam the Switch render loop pumps identically.
 struct UiRequest {
     enum class Kind { Message, Confirm, PickOne, PickMany, Keyboard, Numpad };
     Kind kind = Kind::Message;
     std::string prompt;
-    std::vector<std::string> items; // PickOne / PickMany
-    std::vector<bool> preselected;  // PickMany
-    int maxChars = 0;               // Keyboard: buffer size including the terminator
-    int numMin   = 0;               // Numpad: inclusive lower bound
-    int numMax   = 0;               // Numpad: inclusive upper bound
+    std::vector<std::string> items;
+    std::vector<bool> preselected;
+    int maxChars = 0;
+    int numMin   = 0;
+    int numMax   = 0;
 };
 
 struct UiResponse {
-    bool confirmed = false;     // Confirm / PickMany
-    int index      = -1;        // PickOne (-1 = cancelled) / Numpad (value, -1 = cancelled)
-    std::vector<bool> selected; // PickMany
-    std::string text;           // Keyboard (empty = cancelled)
+    bool confirmed = false;
+    int index      = -1;
+    std::vector<bool> selected;
+    std::string text;
 };
 
 class ScriptUiBridge {
 public:
-    // Script thread. Blocks until the main thread responds.
+
     UiResponse request(UiRequest req);
 
-    // Script thread, fire-and-forget: the status line the main loop draws while
-    // the script runs (the gui_status binding).
     void setStatus(std::string text);
 
-    // Main thread. Hands out the pending request by value, once: the second
-    // call returns nothing until respond() has answered this one and the script
-    // has asked again. Taking a copy is what makes the lifetime rule
-    // unstateable — the caller holds a request, not a pointer into the bridge.
     std::optional<UiRequest> take(void);
 
-    // Main thread. Wakes the script thread with the user's answer.
     void respond(UiResponse resp);
 
-    // Main thread, on script abort. Answers the pending request (if any) with
-    // the default cancelled response and makes every future request() return
-    // it immediately, so an aborting script can never park on the bridge
-    // again. Cleared by reset().
     void cancelAll(void);
 
-    // Main thread. Snapshot of the last gui_status text.
     std::string statusText(void);
 
-    // Main thread, before each run: drops any stale status/request state.
     void reset(void);
 
 private:
@@ -92,8 +74,7 @@ private:
     std::optional<UiRequest> mReq;
     std::optional<UiResponse> mResp;
     std::string mStatus;
-    // mReq stays put while the overlay it raised is up — cancelAll() needs to
-    // see that someone is parked on it — so "already handed out" is its own bit.
+
     bool mTaken     = false;
     bool mCancelled = false;
 };

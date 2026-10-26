@@ -29,20 +29,12 @@
 
 #include "picoc.h"
 
-// Declarations of the native bindings scripts reach through <checkpoint.h>.
-// Every binding has picoc's fixed signature; the prototypes scripts actually
-// see live in the table in library_checkpoint.c, and the implementations are
-// one copy for both consoles (common/script/checkpoint_api.cpp), over the
-// ScriptHost seam (scripthost.hpp) the platforms differ across.
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #define CKPT_BINDING(name) void name(struct ParseState* Parser, struct Value* ReturnValue, struct Value** Param, int NumArgs)
 
-/* titles (catalog index space = the Save list, plus the extdata-only titles
- * appended after it — see ScriptHost::titleCount) */
 CKPT_BINDING(ckpt_titles_count);
 CKPT_BINDING(ckpt_title_find);
 CKPT_BINDING(ckpt_title_id);
@@ -53,13 +45,11 @@ CKPT_BINDING(ckpt_title_has_save);
 CKPT_BINDING(ckpt_title_has_extdata);
 CKPT_BINDING(ckpt_title_backup_path);
 
-/* sd card */
 CKPT_BINDING(ckpt_read_directory);
 CKPT_BINDING(ckpt_delete_directory);
 CKPT_BINDING(ckpt_sd_mkdirs);
 CKPT_BINDING(ckpt_sd_exists);
 
-/* save archives (kind: 0=save, 1=extdata; fixed table of 8 handles) */
 CKPT_BINDING(ckpt_sav_open);
 CKPT_BINDING(ckpt_sav_open_shared);
 CKPT_BINDING(ckpt_sav_open_extdata);
@@ -74,12 +64,10 @@ CKPT_BINDING(ckpt_sav_list);
 CKPT_BINDING(ckpt_sav_commit);
 CKPT_BINDING(ckpt_sav_close);
 
-/* extdata archives that do not exist yet (3DS only) */
 CKPT_BINDING(ckpt_extdata_default_id);
 CKPT_BINDING(ckpt_extdata_create);
 CKPT_BINDING(ckpt_extdata_delete);
 
-/* network */
 CKPT_BINDING(ckpt_net_ip);
 CKPT_BINDING(ckpt_web_get);
 CKPT_BINDING(ckpt_web_request);
@@ -87,19 +75,13 @@ CKPT_BINDING(ckpt_web_upload_file);
 CKPT_BINDING(ckpt_url_encode);
 CKPT_BINDING(ckpt_http_header_value);
 
-/* sealed storage for a script's own small secrets (common/script/seal_api.cpp):
- * AES-256-GCM under a key mixed from console-bound material that is never
- * written to the SD card and an optional user passphrase. Read that file's
- * header before telling a user anything about what it protects. */
 CKPT_BINDING(ckpt_device_seal);
 CKPT_BINDING(ckpt_device_unseal);
 CKPT_BINDING(ckpt_seal_needs_passphrase);
 
-/* zip (common, wraps TransferProto store-only zip over stdio) */
 CKPT_BINDING(ckpt_zip_dir);
 CKPT_BINDING(ckpt_unzip);
 
-/* gui (block the script thread on the UI bridge) */
 CKPT_BINDING(ckpt_gui_message);
 CKPT_BINDING(ckpt_gui_confirm);
 CKPT_BINDING(ckpt_gui_pick_one);
@@ -108,8 +90,6 @@ CKPT_BINDING(ckpt_gui_keyboard);
 CKPT_BINDING(ckpt_gui_numpad);
 CKPT_BINDING(ckpt_gui_status);
 
-/* progress (common, common/script/progress_api.cpp): the one-way half of the
- * script UI. Non-blocking by construction — see the file header. */
 CKPT_BINDING(ckpt_progress_begin);
 CKPT_BINDING(ckpt_progress_set);
 CKPT_BINDING(ckpt_progress_label);
@@ -117,7 +97,6 @@ CKPT_BINDING(ckpt_progress_end);
 CKPT_BINDING(ckpt_progress_note);
 CKPT_BINDING(ckpt_progress_clear);
 
-/* json (platform-neutral, common/script/json_api.cpp) */
 CKPT_BINDING(ckpt_json_new);
 CKPT_BINDING(ckpt_json_parse);
 CKPT_BINDING(ckpt_json_delete);
@@ -136,31 +115,16 @@ CKPT_BINDING(ckpt_json_object_contains);
 CKPT_BINDING(ckpt_json_object_element);
 CKPT_BINDING(ckpt_json_object_key);
 
-/* misc */
 CKPT_BINDING(ckpt_script_log);
 CKPT_BINDING(ckpt_selected_title);
 CKPT_BINDING(ckpt_app_root);
 
-/* not a binding: ScriptRunner calls this after every run (whatever the exit
- * path — normal return, script exit(), parse error longjmp) so a script that
- * forgot sav_close never leaks an open archive into the next run. */
 void ckpt_sav_close_all(void);
 
-/* not bindings: the script kill switch (common/script/scriptabort.c). The
- * main thread requests an abort and picoc's per-statement hook fails the run
- * at the next statement the script executes; long-running bindings (web_get)
- * poll ckpt_script_abort_requested() themselves to bail out early. */
 void ckpt_script_abort_request(void);
 int ckpt_script_abort_requested(void);
 void ckpt_script_abort_reset(void);
 
-/* not a binding: the worker calls this once at entry to drop
- * its own scheduler priority just below the main thread. A syscall-free script
- * (e.g. a pure `while (1)` compute loop) never yields its core, so if it ran at
- * or above the main thread's priority it would starve the loop that samples the
- * hold-B abort — the request would never be raised and the kill switch above
- * could never fire. Running one step below main lets the UI thread always
- * preempt long enough to poll input. */
 void ckpt_script_lower_priority(void);
 
 #ifdef __cplusplus

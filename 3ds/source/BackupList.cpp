@@ -54,16 +54,11 @@ void BackupList::update(void)
         return;
     }
 
-    // Offset used to resolve a touch is the one currently on screen, before the
-    // D-Pad move reclamps it — matching the original single-clamp-at-end order.
     const size_t touchOffset = mCursor.offset();
 
-    // Rows are rebuilt every frame, so hand the current count to the cursor before
-    // it navigates; this is where the selection is clamped, as clampOffset used to.
     mCursor.setCount(mRows.size());
     mCursor.update(hidKeysDown(), hidKeysHeld(), svcGetSystemTick());
 
-    // Touch picks a visible row directly (BackupList owns the row geometry).
     if (hidKeysHeld() & KEY_TOUCH) {
         touchPosition touch;
         hidTouchRead(&touch);
@@ -83,8 +78,6 @@ void BackupList::draw(bool focused) const
     const size_t index  = mCursor.index();
     const size_t last   = std::min(offset + mVisibleRows, mRows.size());
 
-    // Scrollbar: only when there is more than one viewport of rows. Drawn before the
-    // rows so the selected row's fill and outline sit on top of it.
     if (mRows.size() > mVisibleRows) {
         const int trackX = mx + mw - 3;
         C2D_DrawRectSolid(trackX, my, 0.5f, 3, mh, COLOR_LINE);
@@ -106,21 +99,18 @@ void BackupList::draw(bool focused) const
         if (sel) {
             C2D_DrawRectSolid(mx, rowY, 0.5f, mw, mRowH, focused ? C2D_Color32(122, 66, 196, 70) : C2D_Color32(122, 66, 196, 40));
             if (focused) {
-                // Breathing outline + accent bar so the active row reads as live.
+
                 Gui::drawPulsingOutline(mx, rowY, mw, mRowH, 1, COLOR_RING);
             }
-            C2D_DrawRectSolid(mx, rowY + 3, 0.5f, 2, mRowH - 6, COLOR_RING); // left accent bar
+            C2D_DrawRectSolid(mx, rowY + 3, 0.5f, 2, mRowH - 6, COLOR_RING);
         }
 
         const int textY = rowY + (mRowH - 13) / 2;
 
-        // Leading marker: a solid teal tile with a dark glyph for the action rows
-        // ("+" for New backup, "↓" for Receive — high contrast in every row
-        // state), a small dot otherwise.
         if (r.kind != RowKind::Existing) {
             const int tileSz = 14, tileX = mx + 6, tileY = rowY + (mRowH - tileSz) / 2;
             C2D_DrawRectSolid(tileX, tileY, 0.5f, tileSz, tileSz, COLOR_TEAL);
-            // Teal stays light in both themes, so a black glyph holds contrast either way.
+
             const char* glyph = r.kind == RowKind::New ? "+" : "↓";
             const float pw    = text.width(glyph, 0.5f);
             const float lf    = fontGetInfo(NULL)->lineFeed;
@@ -130,12 +120,9 @@ void BackupList::draw(bool focused) const
             C2D_DrawRectSolid(mx + 9, rowY + mRowH / 2 - 2, 0.5f, 4, 4, sel ? COLOR_RING : COLOR_FAINT);
         }
 
-        // Name (left) — near-white so it stays legible on the card and on the
-        // purple selection fill alike; muted only for unselected existing rows.
         const u32 nameColor = (r.kind != RowKind::Existing || sel) ? COLOR_TEXT : COLOR_MUTED;
         text.draw(r.name, mx + 26, textY, 0.45f, nameColor);
 
-        // Meta (right) — backup size, or the New-row caption.
         if (!r.meta.empty()) {
             const float metaW = text.width(r.meta, 0.4f);
             text.draw(r.meta, mx + mw - 10 - metaW, textY + 1, 0.4f, COLOR_FAINT);

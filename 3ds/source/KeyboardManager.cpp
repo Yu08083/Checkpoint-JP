@@ -8,8 +8,6 @@ namespace {
         int max;
     };
 
-    // swkbd filter callback: reject anything outside [min, max] and keep the
-    // keyboard open with an explanatory message instead of accepting the input.
     SwkbdCallbackResult numpadRangeFilter(void* user, const char** ppMessage, const char* text, size_t textlen)
     {
         (void)textlen;
@@ -55,7 +53,7 @@ std::string KeyboardManager::text(const std::string& suggestion, const std::stri
 
 int KeyboardManager::numpad(const std::string& hint, int min, int max)
 {
-    // Cap the digit count to the widest value the range can produce.
+
     int digits = 1;
     for (int m = max; m >= 10; m /= 10) {
         digits++;

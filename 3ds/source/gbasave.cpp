@@ -33,9 +33,9 @@
 #include <memory>
 
 namespace {
-    // See https://www.3dbrew.org/wiki/3DS_Virtual_Console#NAND_Savegame
+
     struct AgbSaveHeader {
-        u8 magic[4]; // ".SAV"
+        u8 magic[4];
         u8 reserved0[0xC];
         u8 cmac[0x10];
         u8 reserved1[0x10];
@@ -43,7 +43,7 @@ namespace {
         u32 timesSaved;
         u64 titleId;
         u8 sdCid[0x10];
-        u32 saveStart; // always 0x200
+        u32 saveStart;
         u32 saveSize;
         u8 reserved2[0x8];
         u32 unknown1;
@@ -54,13 +54,9 @@ namespace {
 
     constexpr u32 kHeaderSize = sizeof(AgbSaveHeader);
     constexpr u32 kCmacOffset = offsetof(AgbSaveHeader, cmac);
-    // The slot CMAC covers the header from unknown0 (0x30) to the end plus the
-    // whole save; magic/reserved0/cmac/reserved1 stay out of the hash.
+
     constexpr u32 kHashStart = 0x30;
 
-    // Every save size a GBA VC footer can configure (EEPROM 512/8K, SRAM 32K,
-    // flash 64K/128K); doubles as the bottom-slot search list when the top
-    // slot is uninitialized.
     constexpr u32 kValidSaveSizes[] = {512, 8 * 1024, 32 * 1024, 64 * 1024, 128 * 1024};
 
     bool validSaveSize(u32 size)
@@ -84,11 +80,6 @@ namespace {
         return file.read(&out, kHeaderSize) == kHeaderSize && R_SUCCEEDED(file.result()) && validHeader(out);
     }
 
-    // Finds the newest slot of the container behind `file` (an AGBSAVE
-    // container: PXI save file or legacy SD dump). Returns false when no slot
-    // validates, i.e. the game never saved. On true, `hdr`/`slotOffset`
-    // describe the slot whose save is current (higher timesSaved; the top
-    // slot wins ties, matching GM9).
     bool locateCurrentSlot(FSStream& file, AgbSaveHeader& hdr, u32& slotOffset)
     {
         AgbSaveHeader top;
@@ -105,8 +96,7 @@ namespace {
             }
             return true;
         }
-        // Top slot uninitialized: the bottom slot can still hold a save. Its
-        // offset depends on the (unknown) save size, so probe every valid one.
+
         for (u32 size : kValidSaveSizes) {
             u32 bottomOffset = kHeaderSize + size;
             if (readHeaderAt(file, bottomOffset, hdr)) {
@@ -117,10 +107,6 @@ namespace {
         return false;
     }
 
-    // AES-CMAC of the slot as AGB_FIRM expects it. FSPXI_CalcSavegameMAC does
-    // the console/title-specific keying over the SHA256 of the hashed region;
-    // the first call after opening the file can return a stale result, so call
-    // until two consecutive results agree (same workaround as PKSM).
     Result calcSlotCmac(FSPXI_File file, const AgbSaveHeader& hdr, const u8* save, u8 outCmac[0x10])
     {
         u8 hash[SHA256_BLOCK_SIZE];
@@ -145,9 +131,6 @@ namespace {
         return res;
     }
 
-    // Pulls the current slot's bare save out of the AGBSAVE container behind
-    // `file` into a fresh buffer. Used both on the PXI file (backup) and on a
-    // legacy full-container SD dump (restore of a pre-format-change backup).
     Result extractCurrentSave(FSStream& file, AgbSaveHeader& hdr, std::unique_ptr<u8[]>& save)
     {
         u32 slotOffset = 0;
@@ -215,9 +198,6 @@ Result GbaSave::restore(FSPXI_Archive arch, FS_Archive sdmc, const std::u16strin
         return input.result();
     }
 
-    // A bare save is exactly one of the valid GBA save sizes; anything else
-    // must parse as an AGBSAVE container (legacy Checkpoint dump), whose
-    // newest slot then provides the save.
     u32 srcSize = input.size();
     std::unique_ptr<u8[]> save;
     u32 saveSize = 0;
@@ -253,8 +233,6 @@ Result GbaSave::restore(FSPXI_Archive arch, FS_Archive sdmc, const std::u16strin
         return output.result();
     }
 
-    // The console's own slot header stays: it carries this console's SD CID
-    // and title id, and its save size tells whether the backup even fits.
     AgbSaveHeader hdr;
     u32 slotOffset = 0;
     if (!locateCurrentSlot(output, hdr, slotOffset)) {
@@ -281,8 +259,6 @@ Result GbaSave::restore(FSPXI_Archive arch, FS_Archive sdmc, const std::u16strin
     }
     sink.advanceBytes(saveSize);
 
-    // Re-sign the slot for this console, or AGB_FIRM will reject the save on
-    // next launch. This is what makes foreign (transferred) backups restorable.
     u8 cmac[0x10] = {0};
     res           = calcSlotCmac(output.pxiFile(), hdr, save.get(), cmac);
     if (R_FAILED(res)) {

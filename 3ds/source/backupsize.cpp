@@ -43,7 +43,7 @@ void BackupSizeCache::request(u64 id, BackupKind kind, const std::u16string& roo
         }
         mPending.insert(k);
     }
-    // Copy the path into the task; the worker owns it for the duration of the walk.
+
     Threads::executeTask([this, k, path = rootPath]() { this->compute(k, path); });
 }
 
@@ -71,7 +71,7 @@ void BackupSizeCache::invalidate(u64 id, BackupKind kind, const std::u16string& 
 {
     std::lock_guard<std::mutex> lock(mMutex);
     mTotals.erase(key(id, kind));
-    // Drop every per-backup entry sitting under this root.
+
     for (auto it = mBackupSizes.begin(); it != mBackupSizes.end();) {
         if (it->first.compare(0, rootPath.size(), rootPath) == 0) {
             it = mBackupSizes.erase(it);
@@ -158,7 +158,7 @@ void BackupSizeCache::compute(u64 cacheKey, std::u16string rootPath)
 
     std::lock_guard<std::mutex> lock(mMutex);
     mPending.erase(cacheKey);
-    // Discard a partial result produced while shutting down.
+
     if (mAbort.load()) {
         return;
     }

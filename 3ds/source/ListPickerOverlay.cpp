@@ -43,7 +43,6 @@ void ListPickerOverlay::drawTop(void) const
     ModalChrome::dimTop(0.6f);
     ModalChrome::drawListCard();
 
-    // Header: prompt on the left, "n / total" counter on the right.
     text.draw(mPrompt, 36, 22, 0.5f, COLOR_TEXT, OVERLAY_Z);
     if (count > 0) {
         std::string counter = StringUtils::format("%d / %d", mHid.fullIndex() + 1, count);

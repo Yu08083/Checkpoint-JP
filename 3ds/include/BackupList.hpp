@@ -32,21 +32,10 @@
 #include <string>
 #include <vector>
 
-// A vertically scrolling list of backups for the v4 title-detail screen. Unlike
-// the generic Scrollable (which paged horizontally and so never advanced past the
-// first page on a vertical D-Pad), this scrolls smoothly: the selection moves
-// through every row and the viewport follows it, with a scrollbar that makes the
-// presence of more rows obvious.
-//
-// Each row carries a name and a right-aligned meta string (a backup's size, or a
-// caption for the leading action rows). Rebuild the rows every frame with
-// clear()/push_back(); the component keeps its own selection and scroll offset.
 class BackupList {
 public:
     BackupList(int x, int y, int w, int h, size_t visibleRows);
 
-    // Action rows ("New backup", "Receive") share the teal-tile styling; Existing
-    // rows are regular backups.
     enum class RowKind { Existing, New, Receive };
 
     struct Row {
@@ -65,19 +54,16 @@ public:
     void setIndex(size_t i);
     void resetIndex(void);
 
-    // Moves the selection from D-Pad / touch and keeps it in view. Call only while
-    // the list owns input (the detail screen is focused).
     void update(void);
 
-    // `focused` brightens the selection styling when the list owns input.
     void draw(bool focused) const;
 
 private:
     int mx, my, mw, mh;
     size_t mVisibleRows;
     int mRowH;
-    ListCursor mCursor; // owns selection, scroll window and D-Pad repeat timing
+    ListCursor mCursor;
     std::vector<Row> mRows;
 };
 
-#endif // BACKUPLIST_HPP
+#endif

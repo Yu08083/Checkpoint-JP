@@ -67,8 +67,6 @@ Result servicesInit(void)
 {
     Result res = 0;
 
-    // Run New 3DS application cores at 804 MHz. libctru makes this a no-op on
-    // Old 3DS/2DS.
     osSetSpeedupEnable(true);
     ATEXIT(disableNew3DSSpeedup);
 
@@ -101,15 +99,13 @@ Result servicesInit(void)
     }
     ATEXIT(Archive::exit);
 
-    // Bootstrap the backup tree. Root owned by Paths so the layout is spelled
-    // once; mkdir wants an "sdmc:"-prefixed POSIX path.
     const std::string ckpt = std::string("sdmc:") + Paths::checkpointRoot();
     mkdir("sdmc:/3ds", 777);
     mkdir(ckpt.c_str(), 777);
     mkdir((ckpt + "/saves").c_str(), 777);
     mkdir((ckpt + "/extdata").c_str(), 777);
     mkdir((ckpt + "/logs").c_str(), 777);
-    // Script drop-in point, so users find where universal scripts go.
+
     mkdir((std::string("sdmc:") + Paths::scriptsRoot()).c_str(), 777);
     mkdir(("sdmc:" + Paths::universalScriptsDir()).c_str(), 777);
 
@@ -118,8 +114,6 @@ Result servicesInit(void)
     romfsInit();
     ATEXIT(romfsExit);
 
-    // Load localized strings before any screen draws. Configuration's singleton
-    // is constructed on first access here, so the language is available at boot.
     i18n::init("romfs:/i18n.json");
     i18n::setLanguage(Configuration::getInstance().language());
 
@@ -152,24 +146,13 @@ Result servicesInit(void)
         Logging::warning("Failed to create socket buffer.");
     }
 
-    // BACKSTOP ONLY for exits that never reach the end of main (early errors, no
-    // workers running yet). The real thread shutdown happens explicitly at the end
-    // of main(), BEFORE exit(): singletons the workers use (BackupSizeCache,
-    // TitleCatalog, …) are lazily constructed after these registrations, so their
-    // destructors run before these handlers would — a live worker would race the
-    // destruction (heap corruption). Threads::exit is idempotent so running it here
-    // after the explicit call is harmless. Order still matters for the backstop:
-    // atexit is LIFO, so these run flags-first, join-second, before any service
-    // teardown; every persistent loop thread must have its stop flag raised before
-    // the join (Server::requestStop here, cart scan via clearCartScanFlag below) or
-    // Threads::exit waits on it forever.
     ATEXIT(Threads::exit);
     ATEXIT(BackupSizeCache::shutdownStatic);
     ATEXIT(Server::requestStop);
     ATEXIT(FTPServer::requestStop);
 
     // Verify TWLN access up front so a missing permission degrades to a logged,
-    // persisted opt-out instead of a per-title failure storm during the scan.
+
     if (Configuration::getInstance().dsiwareSaves()) {
         FS_Archive twln;
         if (R_FAILED(res = FSUSER_OpenArchive(&twln, ARCHIVE_NAND_TWL_FS, fsMakePath(PATH_EMPTY, "")))) {
@@ -201,11 +184,9 @@ void calculateTitleDBHash(u8* hash)
     AM_GetTitleCount(MEDIATYPE_SD, &titleCount);
     const bool nandSaves    = Configuration::getInstance().nandSaves();
     const bool dsiwareSaves = Configuration::getInstance().dsiwareSaves();
-    // The toggles select which NAND titles the scan keeps, so they are part of
-    // the cache identity even when the installed-title list is unchanged.
+
     const u64 configFlags = (nandSaves ? 1 : 0) | (dsiwareSaves ? 2 : 0);
-    // Append the cache format version so a format change invalidates every
-    // existing hash and forces the caches to regenerate.
+
     if (nandSaves || dsiwareSaves) {
         AM_GetTitleCount(MEDIATYPE_NAND, &nandCount);
         std::vector<u64> ordered(titleCount + nandCount);
@@ -259,8 +240,6 @@ std::u16string StringUtils::removeForbiddenCharacters(std::u16string src)
         }
     }
 
-    // Trim trailing spaces. find_last_not_of handles the empty / all-spaces cases
-    // (npos) without the size()-1 underflow of a reverse index loop.
     size_t end = src.find_last_not_of(u' ');
     if (end == std::u16string::npos) {
         src.clear();
@@ -272,15 +251,11 @@ std::u16string StringUtils::removeForbiddenCharacters(std::u16string src)
     return src;
 }
 
-// One decoder and one glyph-width cache for every text-measuring path.
 namespace {
     std::map<u16, charWidthInfo_s*> widthCache;
     std::queue<u16> widthCacheOrder;
     constexpr size_t WIDTH_CACHE_CAP = 1000;
 
-    // Decodes the UTF-8 codepoint starting at s[i] (BMP only — the cache key is
-    // u16). `extraBytes` is how many continuation bytes follow the lead byte;
-    // invalid or truncated sequences decode as 0xFFFF with no advance.
     u16 nextCodepoint(const std::string& s, size_t i, int& extraBytes)
     {
         u16 codepoint = 0xFFFF;
@@ -333,7 +308,7 @@ std::string StringUtils::splitWord(const std::string& text, float scaleX, float 
                 currentWidth = charWidth;
             }
 
-            i += extraBytes; // Yay, variable width encodings
+            i += extraBytes;
         }
     }
     return word;
@@ -373,7 +348,7 @@ std::string StringUtils::wrap(const std::string& text, float scaleX, float maxWi
     for (std::string::const_iterator it = text.begin(); it != text.end(); ++it) {
         word += *it;
         if (*it == ' ') {
-            // split single words that are bigger than maxWidth
+
             if (StringUtils::textWidth(line + word, scaleX) <= maxWidth) {
                 line += word;
             }
@@ -382,7 +357,7 @@ std::string StringUtils::wrap(const std::string& text, float scaleX, float maxWi
                     line += word;
                     line = StringUtils::splitWord(line, scaleX, maxWidth);
                     word = line.substr(line.find('\n') + 1, std::string::npos);
-                    line = line.substr(0, line.find('\n')); // Split line on first newLine; assign second part to word and first to line
+                    line = line.substr(0, line.find('\n'));
                 }
                 if (line[line.size() - 1] == ' ') {
                     dst += line.substr(0, line.size() - 1) + '\n';
@@ -396,8 +371,6 @@ std::string StringUtils::wrap(const std::string& text, float scaleX, float maxWi
         }
     }
 
-    // "Another iteration" of the loop b/c it probably won't end with a space.
-    // If it does, no harm done.
     if (StringUtils::textWidth(line + word, scaleX) <= maxWidth) {
         dst += line + word;
     }

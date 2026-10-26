@@ -32,12 +32,6 @@
 #include <string>
 #include <vector>
 
-// A generic vertical action menu over the shared ListPickerOverlay chrome: a
-// fixed list of labelled items, each with a callback fired (after the menu
-// dismisses) when A is pressed on it. It is the main screen's SELECT entry
-// point — a touch-free home for actions that would otherwise fight the backup
-// buttons for a slot (Scripts, Settings, ...), and grows without stealing more
-// physical buttons.
 class MenuOverlay : public ListPickerOverlay {
 public:
     struct Item {

@@ -174,7 +174,6 @@ void Title::loadBackupList(const std::u16string& basePath, const std::vector<std
         Logging::error("Couldn't retrieve the directory list for the title {}", shortDescription());
     }
 
-    // backups from configured additional folders, appended unsorted after "New..."
     try {
         for (const auto& folder : additionalFolders) {
             if (!io::directoryExists(Archive::sdmc(), folder)) {

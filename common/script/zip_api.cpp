@@ -24,15 +24,6 @@
  *         reasonable ways as different from the original version.
  */
 
-// zip_dir / unzip: the store-only zip bindings scripts use to package a backup
-// folder into one file before uploading it (and to unpack a downloaded one).
-// Both wrap the exact TransferProto framing the wireless transfer and tools/chlink
-// interoperate with — same CRC and path-safety guarantees — but over plain stdio
-// seams, so one copy serves 3DS and Switch. The file bytes stream through these
-// FILE* seams and never enter the interpreter heap, so a multi-MB save is fine on
-// picoc's ~32 KB heap. Scripts already open bare SD paths ("/3ds/..." / "/switch/...")
-// with fopen/opendir on both consoles, so no path prefixing is needed here.
-
 #include "scriptargs.hpp"
 #include "scriptconsole.hpp"
 #include "transferprotocol.hpp"
@@ -50,14 +41,11 @@ extern "C" {
 }
 
 namespace {
-    // hold-B abort: the script kill switch the per-statement hook can't reach
-    // while a long zip/unzip runs, so the framing loops poll it between chunks.
+
     bool scriptCancelled(void)
     {
         return ckpt_script_abort_requested() != 0;
     }
-
-    // ---- stdio-backed TransferProto seams --------------------------------
 
     struct FileSink : TransferProto::ByteSink {
         FILE* f;
@@ -88,11 +76,8 @@ namespace {
         size_t read(void* dst, size_t n) override { return f != nullptr ? fread(dst, 1, n, f) : 0; }
     };
 
-    // Writes extracted entries under `root`, creating parent directories as it
-    // goes. mkdir on an existing path fails harmlessly; the fopen is the real
-    // success check.
     struct DirExtractSink : TransferProto::ExtractSink {
-        std::string root; // always ends with '/'
+        std::string root;
         FILE* out = nullptr;
         explicit DirExtractSink(std::string r) : root(std::move(r))
         {
@@ -143,10 +128,6 @@ namespace {
         }
     };
 
-    // Recursively gather files (with '/'-separated relative paths) and the dir
-    // list sendZipStream needs. Returns false if any regular file exceeds the
-    // store-only entry limit or carries an unsafe relative path — the whole zip
-    // must refuse rather than emit a truncated/traversing entry.
     bool collect(const std::string& root, const std::string& sub, std::vector<TransferProto::SendFile>& files, std::vector<std::string>& dirs)
     {
         std::string current = root;
@@ -156,7 +137,7 @@ namespace {
         current += sub;
         DIR* d = opendir(current.c_str());
         if (d == nullptr) {
-            return true; // unreadable/empty dir contributes nothing
+            return true;
         }
         bool ok = true;
         while (struct dirent* ent = readdir(d)) {
@@ -205,7 +186,7 @@ namespace {
         }
         const std::optional<uint64_t> totalBytes = TransferProto::zipStreamSize(files, dirs);
         if (!totalBytes) {
-            return -1; // exceeds the 4 GB store-only ceiling (no save comes close)
+            return -1;
         }
 
         FILE* f = fopen(outZipPath, "wb");
@@ -215,9 +196,7 @@ namespace {
         FileSink sink(f);
         StdFileReader reader;
         bool wasCancelled = false;
-        // Drives the reserved innermost bar so a script gets a byte-level bar
-        // under whatever item-level bar it drives itself, without writing any
-        // progress code around the call.
+
         ScriptConsole::get().beginIo("zip", (long long)*totalBytes);
         const bool ok = TransferProto::sendZipStream(
             sink, files, dirs, reader, scriptCancelled, [](size_t n) { ScriptConsole::get().addIo((long long)n); }, wasCancelled);

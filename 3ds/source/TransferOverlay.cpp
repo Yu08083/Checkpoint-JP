@@ -104,9 +104,6 @@ void ReceiveOverlay::update(const InputState& input)
 {
     (void)input;
 
-    // While an upload is in flight, B means "cancel the transfer", never "close
-    // the overlay": the receiver must stay registered until the server thread
-    // has abandoned the request, so closing waits for the transfer to end.
     TransferSnapshot ts = TransferStatus::snapshot();
     if (ts.active && ts.kind == TransferKind::Network) {
         if (hidKeysHeld() & KEY_B) {

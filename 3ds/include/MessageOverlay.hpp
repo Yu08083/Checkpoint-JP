@@ -35,8 +35,6 @@
 #include <memory>
 #include <string>
 
-// One-message modal with a single OK button (A/B/tap dismisses). Owns the whole
-// chrome; InfoOverlay and ErrorOverlay are just color/header configurations.
 class MessageOverlay : public Overlay {
 public:
     void drawTop(void) const override;
@@ -44,10 +42,10 @@ public:
     void update(const InputState& input) override;
 
 protected:
-    // Everything Info and Error differ by.
+
     struct Style {
         u32 outline, buttonBg, buttonFg, ring;
-        std::string header; // accent line above the text (empty = none)
+        std::string header;
         u32 headerColor;
     };
     MessageOverlay(Screen& screen, const std::string& mtext, const Style& style);

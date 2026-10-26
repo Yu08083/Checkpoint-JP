@@ -24,14 +24,6 @@
  *         reasonable ways as different from the original version.
  */
 
-// The 3DS side of the script bindings' seam (common/script/scripthost.hpp).
-//
-// The catalog index space is the Save list followed by the titles the Extdata
-// list holds alone (refreshExtras below); a save handle is an open FS archive
-// addressed with UTF-16 paths. Everything runs on the script worker thread:
-// TitleCatalog reads are safe there (recursive mutex since arch-review S4), and
-// nothing here may trigger a catalog refresh.
-
 #include "scripthost.hpp"
 #include "backuptarget.hpp"
 #include "common.hpp"
@@ -51,16 +43,13 @@
 
 namespace {
 
-    // sav_* handle table. Slots hold the opened archive plus what commit means
-    // for it; savCloseAll wipes it after every run.
     constexpr int MAX_SAV_HANDLES = 8;
     struct SavSlot {
         ArchiveHandle arch;
-        bool commitable = false; // CTR save archive: commit + secure-value fix
-        u32 uniqueId    = 0;     // for the secure-value fix
+        bool commitable = false;
+        u32 uniqueId    = 0;
     };
 
-    // Script paths are archive-absolute; tolerate a missing leading slash.
     std::u16string archivePath(const char* path)
     {
         std::string p = path;
@@ -70,10 +59,6 @@ namespace {
         return StringUtils::UTF8toUTF16(p.c_str());
     }
 
-    // Is this archive path a directory? Opening a directory handle is the only
-    // way the archive answers, and it is done raw here rather than through
-    // Directory so a probe that says "no" does not log an FS error: sav_rename
-    // asks this about every path it is given, and most of them are files.
     bool isArchiveDir(FS_Archive archive, const std::u16string& path)
     {
         Handle dir;
@@ -84,8 +69,6 @@ namespace {
         return true;
     }
 
-    // Opening it is the only thing that answers for an archive the catalog does
-    // not list.
     bool extdataExists(u32 extdataId)
     {
         FS_Archive archive;
@@ -164,8 +147,6 @@ namespace {
                 return -2;
             }
 
-            // Only regular CTR saves and extdata are file-level archives; GBA VC
-            // (FSPXI raw), DSiWare (TWL FAT) and SPI cart saves are not reachable here.
             if (kind == 0) {
                 const bool spiCart = title.mediaType() == MEDIATYPE_GAME_CARD && title.cardType() != CARD_CTR;
                 if (!title.accessibleSave() || title.isGBAVC() || title.isDSiWare() || spiCart) {
@@ -190,9 +171,7 @@ namespace {
 
         int savOpenShared(uint64_t id) override
         {
-            // The id's low 32 bits are the extdata id, its high 32 the archive
-            // magic (0x00048000 for the Home Menu shared extdata that holds
-            // Play Coins).
+
             const int slot = freeSlot();
             if (slot < 0) {
                 return -2;
@@ -205,9 +184,6 @@ namespace {
                 return (int)res;
             }
 
-            // Shared extdata is a file-level archive like ordinary extdata: it needs
-            // no commit and no secure-value fix, so savCommit is a no-op on this
-            // handle.
             mSlots[slot].arch       = ArchiveHandle::fromFs(archive);
             mSlots[slot].commitable = false;
             mSlots[slot].uniqueId   = 0;
@@ -227,8 +203,6 @@ namespace {
                 return (int)res;
             }
 
-            // Ordinary extdata, just reached by id instead of through a Title:
-            // no commit and no secure value, like savOpen's kind == 1 path.
             mSlots[slot].arch       = ArchiveHandle::fromFs(archive);
             mSlots[slot].commitable = false;
             mSlots[slot].uniqueId   = 0;
@@ -242,10 +216,6 @@ namespace {
                 return -2;
             }
 
-            // {mediatype, savedata id}, the same 8-byte path FBI's system
-            // savedata browser opens one with. The id belongs to a system
-            // module, not to a title: 0x00010035 is the NEWS module's, whose
-            // news.db holds the notification list.
             FS_Archive archive;
             const u32 path[2] = {MEDIATYPE_NAND, saveId};
             const Result res  = FSUSER_OpenArchive(&archive, ARCHIVE_SYSTEM_SAVEDATA, {PATH_BINARY, 8, path});
@@ -253,15 +223,8 @@ namespace {
                 return (int)res;
             }
 
-            // Every open lands in the log: this is the one archive kind a
-            // script can reach that the console itself depends on, so a report
-            // of a console misbehaving after a script run says which id it was
-            // pointed at.
             Logging::warning("[script] opened NAND system savedata 0x{:08X}", saveId);
 
-            // Journalled like a title's own save archive, so it commits; but no
-            // title owns it, so the secure-value epilogue has nothing to drop
-            // and uniqueId stays 0 (see savCommit).
             mSlots[slot].arch       = ArchiveHandle::fromFs(archive);
             mSlots[slot].commitable = true;
             mSlots[slot].uniqueId   = 0;
@@ -290,9 +253,7 @@ namespace {
             const Result res = stream.result();
             stream.close();
             if (read != size) {
-                // A short read is a failure even when FS reported success: the
-                // script has no other way to know the buffer is not the file,
-                // and handing it back would make a truncated save look whole.
+
                 Logging::warning("[script] sav_read '{}': {} of {} bytes (res 0x{:08X})", path, read, size, (u32)res);
                 ScriptHeap::get().release(buf);
                 return R_FAILED(res) ? (int)res : -4;
@@ -306,8 +267,7 @@ namespace {
 
         int savWrite(int handle, const char* path, const void* data, size_t size) override
         {
-            // Create/replace: the create-on-open path keeps an existing file's size,
-            // so drop it first (a missing file fails harmlessly).
+
             const std::u16string p = archivePath(path);
             FSUSER_DeleteFile(mSlots[handle].arch.fs(), fsMakePath(PATH_UTF16, p.data()));
 
@@ -338,18 +298,14 @@ namespace {
 
         int savRmdir(int handle, const char* path) override
         {
-            // The non-recursive call by contract: a tree the script did not walk
-            // itself must not disappear behind one confirmation.
+
             const std::u16string p = archivePath(path);
             return (int)FSUSER_DeleteDirectory(mSlots[handle].arch.fs(), fsMakePath(PATH_UTF16, p.data()));
         }
 
         int savRename(int handle, const char* from, const char* to) override
         {
-            // Files and directories take different FS calls, and the archive
-            // will not tell which this is as part of the rename, so ask first —
-            // trying one and falling back to the other would report the wrong
-            // call's error whenever the real failure is on the destination.
+
             const std::u16string f = archivePath(from);
             const std::u16string t = archivePath(to);
             const FS_Archive arch  = mSlots[handle].arch.fs();
@@ -374,15 +330,12 @@ namespace {
         int savCommit(int handle) override
         {
             if (!mSlots[handle].commitable) {
-                return 0; // extdata needs no commit
+                return 0;
             }
 
             Result res = FSUSER_ControlArchive(mSlots[handle].arch.fs(), ARCHIVE_ACTION_COMMIT_SAVE_DATA, NULL, 0, NULL, 0);
             if (R_SUCCEEDED(res) && mSlots[handle].uniqueId != 0) {
-                // Same epilogue as restore: drop the secure value so the game accepts
-                // the modified save instead of flagging a rollback. A system savedata
-                // archive belongs to no title, so there is no secure value to drop and
-                // the commit above is the whole job.
+
                 u8 out;
                 u64 secureValue = ((u64)SECUREVALUE_SLOT_SD << 32) | (mSlots[handle].uniqueId << 8);
                 res             = FSUSER_ControlSecureSave(SECURESAVE_ACTION_DELETE, &secureValue, 8, &out, 1);
@@ -406,15 +359,13 @@ namespace {
 
         int extdataDefaultId(uint64_t titleId) override
         {
-            // The derivation TitleProbe uses, so an archive created under this
-            // id is one the next refresh finds.
+
             return (int)TitleQuirks::extdataIdFor((u64)titleId);
         }
 
         int extdataCreate(uint64_t titleId, u32 extdataId, int maxDirs, int maxFiles) override
         {
-            // Never over an existing archive: FS would take the create as a
-            // wipe-and-remake, so a mistyped id would erase a save.
+
             if (extdataExists(extdataId)) {
                 return -2;
             }
@@ -425,10 +376,6 @@ namespace {
                 return -1;
             }
 
-            // The archive keeps the title's SMDH as its icon, which is what the
-            // console's data-management screen shows for it. A title whose SMDH
-            // will not load still gets its archive: FS reads a zero-length icon
-            // as "none".
             smdh_s* smdh = loadSMDH((u32)titleId, (u32)(titleId >> 32), (u8)title.mediaType());
             if (smdh == NULL) {
                 Logging::warning("[script] extdata_create: no SMDH for title {:016X}, creating without an icon", (u64)titleId);
@@ -449,8 +396,7 @@ namespace {
 
         int extdataDelete(u32 extdataId) override
         {
-            // Asked first so a missing archive reads as -2 rather than as
-            // whichever Result FS picks for one.
+
             if (!extdataExists(extdataId)) {
                 return -2;
             }
@@ -464,12 +410,6 @@ namespace {
             return 0;
         }
 
-        // The NAND CID: 16 bytes burnt into this console's internal storage,
-        // reachable only by asking FS (already initialised, so no service of our
-        // own to open and no way for this to start failing later). Deliberately
-        // NOT the SD CID as well — that would tie a sealed credential to the
-        // card it sits on, and cloning an SD onto a bigger one is a thing users
-        // routinely do; the console is what we mean to bind to.
         int deviceSecret(uint8_t* out, int want) override
         {
             if (want != DeviceKeySourceBest && want != DeviceKeySourceCtrNand) {
@@ -479,8 +419,7 @@ namespace {
             if (R_FAILED(FSUSER_GetNandCid(cid, sizeof(cid)))) {
                 return -1;
             }
-            // Hashed rather than handed over raw, so the only thing that ever
-            // leaves this function is a value the CID cannot be read back out of.
+
             mbedtls_sha256_context ctx;
             mbedtls_sha256_init(&ctx);
             mbedtls_sha256_starts_ret(&ctx, 0);
@@ -494,8 +433,7 @@ namespace {
 
         bool randomBytes(void* out, size_t size) override
         {
-            // ps:ps owns the hardware RNG. Opened and closed around the call
-            // rather than held: this runs a handful of times per script run.
+
             if (R_SUCCEEDED(psInit())) {
                 const Result res = PS_GenerateRandomBytes(out, size);
                 psExit();
@@ -503,11 +441,7 @@ namespace {
                     return true;
                 }
             }
-            // ps unavailable. Every seal draws a fresh salt as well as a fresh
-            // nonce, and the salt is what the key is derived from, so what this
-            // fallback has to guarantee is not secrecy but that two seals never
-            // come out with the same pair — a tick counter that never repeats
-            // within a boot, hashed with a call counter, does that.
+
             static u32 calls = 0;
             uint8_t* dest    = (uint8_t*)out;
             while (size > 0) {
@@ -533,10 +467,7 @@ namespace {
 
         void lowerPriority(void) override
         {
-            // The thread pool spawns the worker one step ABOVE the main thread
-            // (prio-1), so a syscall-free compute loop would starve the UI thread
-            // outright; +2 lands it just below main, letting the UI thread always
-            // preempt to sample the hold-B abort.
+
             s32 prio = 0;
             if (R_SUCCEEDED(svcGetThreadPriority(&prio, CUR_THREAD_HANDLE))) {
                 svcSetThreadPriority(CUR_THREAD_HANDLE, prio + 2);
@@ -554,17 +485,6 @@ namespace {
             return -1;
         }
 
-        // The extras: Checkpoint keeps two title lists, and a title whose save is
-        // not reachable but whose extdata is lives in the Extdata one alone —
-        // PKSM's archive, which loader.cpp probes for by id, is the case every
-        // user meets. The Save list on its own would hide those titles from every
-        // script while the app's own UI offers them, so the script index space is
-        // the Save list with them appended: existing indices keep their values,
-        // and an extra answers title_has_save() with 0 and title_has_extdata()
-        // with 1.
-        //
-        // Rebuilt when the catalog's generation moves, because a script may be
-        // running while the loader thread finishes a refresh.
         void refreshExtras(void)
         {
             TitleCatalog& catalog = TitleCatalog::get();
@@ -586,7 +506,6 @@ namespace {
             }
         }
 
-        // The title behind a script-space index, false when there is none.
         bool catalogTitle(int idx, Title& out)
         {
             refreshExtras();
@@ -607,25 +526,20 @@ namespace {
         }
 
         struct Extra {
-            int index; // into the Extdata list
-            u64 id;    // kept so title_find costs no catalog copies
+            int index;
+            u64 id;
         };
 
         SavSlot mSlots[MAX_SAV_HANDLES];
         std::vector<Extra> mExtras;
-        u32 mExtrasGeneration = 0; // TitleCatalog's counter starts at 1
+        u32 mExtrasGeneration = 0;
         int mSaveCount        = 0;
     };
 }
 
 ScriptHost& ScriptHost::get(void)
 {
-    // Deliberately never destroyed. The slots hold FS archive handles, and a
-    // static's destructor runs after servicesExit(): closing an archive there
-    // would be a call into a service that is already gone. ScriptRunner's
-    // ckpt_sav_close_all() empties the table after every run whatever the exit
-    // path, so nothing is left open — and if a future path ever did leave one,
-    // the kernel reclaims it at process exit instead of the app faulting.
+
     static CtrScriptHost* host = new CtrScriptHost();
     return *host;
 }

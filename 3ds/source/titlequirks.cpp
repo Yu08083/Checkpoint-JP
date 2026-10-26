@@ -29,24 +29,22 @@
 bool TitleQuirks::isSystemExcluded(u64 id)
 {
     switch ((u32)id) {
-        // Instruction Manual
+
         case 0x00008602:
         case 0x00009202:
         case 0x00009B02:
         case 0x0000A402:
         case 0x0000AC02:
         case 0x0000B402:
-        // Garbage
+
         case 0x00021A00:
             return true;
     }
 
-    // updates
     if ((id >> 32) == 0x0004000E) {
         return true;
     }
 
-    // DSi non-executable data archives (no save data of their own)
     if ((id >> 32) == 0x0004800F) {
         return true;
     }
@@ -59,26 +57,23 @@ u32 TitleQuirks::extdataIdFor(u64 id)
     u32 low = (u32)id;
     switch (low) {
         case 0x00055E00:
-            return 0x055D; // Pokémon Y
+            return 0x055D;
         case 0x0011C400:
-            return 0x11C5; // Pokémon Omega Ruby
+            return 0x11C5;
         case 0x00175E00:
-            return 0x1648; // Pokémon Moon
+            return 0x1648;
         case 0x00179600:
         case 0x00179800:
-            return 0x1794; // Fire Emblem Conquest SE NA
+            return 0x1794;
         case 0x00179700:
         case 0x0017A800:
-            return 0x1795; // Fire Emblem Conquest SE EU
+            return 0x1795;
         case 0x0012DD00:
         case 0x0012DE00:
-            return 0x12DC; // Fire Emblem If JP
+            return 0x12DC;
         case 0x001B5100:
-            return 0x1B50; // Pokémon Ultramoon
-                           // TODO: need confirmation for this
-                           // case 0x001C5100:
-                           // case 0x001C5300:
-                           //     return 0x0BD3; // Etrian Odyssey V: Beyond the Myth
+            return 0x1B50;
+
     }
 
     return low >> 8;

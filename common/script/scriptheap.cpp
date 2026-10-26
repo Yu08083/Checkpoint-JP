@@ -65,9 +65,7 @@ void* ScriptHeap::reallocate(void* ptr, size_t size)
     if (!ptr) {
         return alloc(size);
     }
-    // Only blocks this heap owns may be realloc'd: anything else is a script
-    // bug, and passing it to realloc() would be the corruption free() is
-    // guarded against below. Leave it alone and answer null.
+
     {
         std::lock_guard<std::mutex> lock(mMutex);
         auto it = mBlocks.find(ptr);
@@ -87,8 +85,7 @@ void* ScriptHeap::reallocate(void* ptr, size_t size)
 
 void* ScriptHeap::dupString(const std::string& str)
 {
-    // size() + 1 from data(): the terminator comes along, and so does any NUL
-    // inside the payload — web_get's body reaches the script this way.
+
     char* ret = (char*)alloc(str.size() + 1);
     if (ret) {
         memcpy(ret, str.data(), str.size() + 1);
@@ -120,8 +117,7 @@ bool ScriptHeap::release(void* ptr)
         deleter = it->second;
         mBlocks.erase(it);
     }
-    // Outside the lock: a deleter is free() or a C++ destructor, neither of
-    // which needs the map, and both of which can be slow.
+
     deleter(ptr);
     return true;
 }
@@ -145,10 +141,7 @@ void ScriptHeap::releaseAll(void)
     if (blocks.empty()) {
         return;
     }
-    // Not a defect in itself: a script that returns normally still leaves
-    // whatever it never free()d, and a run aborted mid-request leaves the whole
-    // response body. The count is the interesting part when a script is
-    // suspected of exhausting linear memory on an O3DS.
+
     Logging::debug("[script] heap reclaimed {} block(s) left by the run", blocks.size());
     for (auto& block : blocks) {
         block.second(block.first);
@@ -160,8 +153,6 @@ size_t ScriptHeap::liveBlocks(void) const
     std::lock_guard<std::mutex> lock(mMutex);
     return mBlocks.size();
 }
-
-/* ---- the C face, for picoc's stdlib ----------------------------------- */
 
 extern "C" {
 
@@ -183,9 +174,7 @@ void* ckpt_script_realloc(void* ptr, size_t size)
 void ckpt_script_free(void* ptr)
 {
     if (ptr && !ScriptHeap::get().release(ptr)) {
-        // A double free, or a free() of a pointer the script never owned (a
-        // borrowed json element, an interpreter-owned string). The real free()
-        // would corrupt the allocator; releaseAll() has the real blocks anyway.
+
         Logging::warning("[script] free() of a pointer the script does not own, ignored");
     }
 }

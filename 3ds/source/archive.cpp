@@ -50,8 +50,7 @@ Result Archive::init(void)
     if (R_FAILED(res)) {
         return res;
     }
-    // Steal a session to the PxiFS0 service so we can talk to FSPXI directly,
-    // which lets us read/write the decrypted raw GBA VC save files.
+
     return svcControlService(SERVICEOP_STEAL_CLIENT_SESSION, &FsPxiHandle, "PxiFS0");
 }
 
@@ -112,9 +111,7 @@ SaveDataSource SaveDataSource::twlSave(u32 lowid, u32 highid)
 
 std::u16string Archive::twlSaveDataPath(u32 lowid, u32 highid)
 {
-    // Normalize the high id to the install category (00030004 DSiWare,
-    // 00030005/00030015 system): TWLN stores titles under 000300xx even though
-    // AM reports them as 000480xx.
+
     char path[64];
     snprintf(path, sizeof(path), "/title/%08lx/%08lx/data/", (highid & 0x00000FFF) | 0x00030000, lowid);
     return StringUtils::UTF8toUTF16(path);
@@ -155,16 +152,14 @@ bool SaveDataSource::accessible(void) const
     if (!handle) {
         return false;
     }
-    // A raw GBA VC archive opens even when no save is present; it is only really
-    // accessible if the embedded save file opens cleanly.
+
     if (mKind == Kind::RawGbaSave) {
         FSStream file(handle.pxi(), FS_OPEN_READ);
         bool good = file.good();
         file.close();
         return good;
     }
-    // TWLN opens as a whole; the title is only backupable if its data directory
-    // actually exists on the TWL FAT.
+
     if (mKind == Kind::TwlSave) {
         Handle dir;
         std::u16string path = Archive::twlSaveDataPath(mA, mB);

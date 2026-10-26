@@ -1,4 +1,3 @@
-/*  */
 #include <errno.h>
 
 #include "interpreter.h"
@@ -323,10 +322,9 @@ static int EWOULDBLOCKValue = EWOULDBLOCK;
 static int EXDEVValue = EXDEV;
 #endif
 
-/* creates various system-dependent definitions */
 void StdErrnoSetupFunc(Picoc* pc)
 {
-    /* defines */
+
 #ifdef EACCES
     VariableDefinePlatformVar(
         pc, NULL, "EACCES", &pc->IntType, (union AnyValue*)&EACCESValue, false);

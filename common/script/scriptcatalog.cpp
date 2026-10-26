@@ -34,10 +34,6 @@ namespace {
     using ScriptCatalog::Root;
     using ScriptCatalog::Source;
 
-    // Merges one section (universal or a title's specific scripts) across its
-    // roots. Roots come base-first (bundled, then SD): a later root's file with
-    // the same name replaces the earlier one and is flagged `overridden`. The
-    // merged section is appended to `out`, sorted alphabetically.
     void scanSection(const std::vector<Root>& roots, bool universal, std::vector<Entry>& out)
     {
         const size_t first = out.size();
@@ -51,7 +47,7 @@ namespace {
                 if (name.size() <= 2 || name.compare(name.size() - 2, 2, ".c") != 0) {
                     continue;
                 }
-                // Only files directly in the directory count; subfolders are assets.
+
                 const std::string path = root.dir + "/" + name;
                 struct stat st;
                 if (stat(path.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) {
@@ -60,8 +56,7 @@ namespace {
                 const std::string display = name.substr(0, name.size() - 2);
                 auto it                   = std::find_if(out.begin() + first, out.end(), [&](const Entry& e) { return e.name == display; });
                 if (it != out.end()) {
-                    // A later root shadows an earlier one: the SD file wins and
-                    // is marked as an override of the bundled script.
+
                     it->path       = path;
                     it->source     = root.source;
                     it->overridden = true;

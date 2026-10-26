@@ -7,8 +7,6 @@
 #include <readline/readline.h>
 #endif
 
-/* DEBUGGER here only enables the per-statement hook scriptabort.c turns into
- * the script kill switch — no SIGINT-driven manual break on a console. */
 #ifdef DEBUGGER
 static int gEnableDebugger = true;
 #else
@@ -18,12 +16,11 @@ void PlatformInit(Picoc* pc) {}
 
 void PlatformCleanup(Picoc* pc) {}
 
-/* get a line of interactive input */
 char* PlatformGetLine(char* Buf, int MaxLen, const char* Prompt)
 {
 #ifdef USE_READLINE
     if (Prompt != NULL) {
-        /* use GNU readline to read the line */
+
         char* InLine = readline(Prompt);
         if (InLine == NULL) {
             return NULL;
@@ -50,23 +47,19 @@ char* PlatformGetLine(char* Buf, int MaxLen, const char* Prompt)
     return fgets(Buf, MaxLen, stdin);
 }
 
-/* get a character of interactive input */
 int PlatformGetCharacter()
 {
     fflush(stdout);
     return getchar();
 }
 
-/* write a character to the console */
 void PlatformPutc(unsigned char OutCh, union OutputStreamInfo* Stream)
 {
-    /* "the console" is the live log pane, not the process stdout, which is
-     * nowhere on either device. */
+
     char ch = (char)OutCh;
     ckpt_console_write(&ch, 1);
 }
 
-/* read a file into memory */
 char* PlatformReadFile(Picoc* pc, const char* FileName)
 {
     struct stat FileInfo;
@@ -106,12 +99,10 @@ char* PlatformReadFile(Picoc* pc, const char* FileName)
     return ReadText;
 }
 
-/* read and scan a file for definitions */
 void PicocPlatformScanFile(Picoc* pc, const char* FileName)
 {
     char* SourceStr = PlatformReadFile(pc, FileName);
 
-    /* ignore "#!/path/to/picoc" .. by replacing the "#!" with "//" */
     if (SourceStr != NULL && SourceStr[0] == '#' && SourceStr[1] == '!') {
         SourceStr[0] = '/';
         SourceStr[1] = '/';
@@ -120,7 +111,6 @@ void PicocPlatformScanFile(Picoc* pc, const char* FileName)
     PicocParse(pc, FileName, SourceStr, strlen(SourceStr), true, false, true, gEnableDebugger);
 }
 
-/* exit the program */
 void PlatformExit(Picoc* pc, int RetVal)
 {
     pc->PicocExitValue = RetVal;

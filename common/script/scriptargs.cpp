@@ -33,7 +33,7 @@ extern "C" {
 }
 
 namespace {
-    // picoc's own diagnostics are terse and unpunctuated; match them.
+
     const char* baseName(enum BaseType base)
     {
         switch (base) {
@@ -49,10 +49,7 @@ namespace {
 
 void ScriptArgs::fail(const char* fmt, ...) const
 {
-    // Formatted here rather than handed to ProgramFail, which knows only
-    // %s/%d/%c/%t/%f and has no way to prepend the binding name. A stack buffer
-    // on purpose: this runs on the way out of a failing run, so it must not
-    // depend on an allocation succeeding.
+
     char message[256];
     va_list args;
     va_start(args, fmt);
@@ -60,14 +57,12 @@ void ScriptArgs::fail(const char* fmt, ...) const
     va_end(args);
 
     ProgramFail(mParser, "%s: %s", mBinding, message);
-    __builtin_unreachable(); // ProgramFail longjmps; it is just not declared so
+    __builtin_unreachable();
 }
 
 struct Value* ScriptArgs::at(int i) const
 {
-    // picoc rejects a call with too few arguments before it ever reaches an
-    // intrinsic, so this only fires when a binding reads past its own
-    // prototype in library_checkpoint.c.
+
     if (mParam == nullptr || i < 0 || i >= mNumArgs) {
         fail("argument %d is missing (%d passed)", i + 1, mNumArgs);
     }
@@ -81,9 +76,7 @@ struct Value* ScriptArgs::at(int i) const
 int ScriptArgs::intAt(int i) const
 {
     struct Value* value = at(i);
-    // The Value carries the type from the prototype, so a mismatch here means
-    // the binding and its declaration disagree — a Checkpoint bug that used to
-    // read a pointer as an int and abort somewhere else entirely.
+
     if (value->Typ == nullptr || value->Typ->Base != TypeInt) {
         fail("argument %d is declared %s, read as int", i + 1, value->Typ != nullptr ? baseName(value->Typ->Base) : "untyped");
     }
@@ -93,9 +86,7 @@ int ScriptArgs::intAt(int i) const
 void* ScriptArgs::ptrAt(int i, bool allowNull) const
 {
     struct Value* value = at(i);
-    // Every pointer parameter — char*, char**, int*, struct directory*,
-    // struct JSON* — arrives as TypePointer; picoc allocates the argument slot
-    // from the prototype, so an array argument has already decayed by here.
+
     if (value->Typ == nullptr || value->Typ->Base != TypePointer) {
         fail("argument %d is declared %s, read as a pointer", i + 1, value->Typ != nullptr ? baseName(value->Typ->Base) : "untyped");
     }
@@ -105,8 +96,6 @@ void* ScriptArgs::ptrAt(int i, bool allowNull) const
     }
     return ptr;
 }
-
-/* ---- integers ---------------------------------------------------------- */
 
 int ScriptArgs::num(int i) const
 {
@@ -140,8 +129,6 @@ int ScriptArgs::count(int i) const
     return n;
 }
 
-/* ---- strings ----------------------------------------------------------- */
-
 const char* ScriptArgs::str(int i) const
 {
     return (const char*)ptrAt(i, false);
@@ -152,8 +139,6 @@ const char* ScriptArgs::strOr(int i, const char* fallback) const
     const char* s = (const char*)ptrAt(i, true);
     return s != nullptr ? s : fallback;
 }
-
-/* ---- pointers ---------------------------------------------------------- */
 
 void* ScriptArgs::ptr(int i) const
 {
@@ -188,14 +173,10 @@ char* ScriptArgs::outBuf(int i, int size) const
     return (char*)ptrAt(i, false);
 }
 
-/* ---- arrays ------------------------------------------------------------ */
-
 char* const* ScriptArgs::strArray(int i, int count) const
 {
     char* const* items = (char* const*)ptrAt(i, count > 0 ? false : true);
-    // Walked once here so the binding's own loop can index without checking:
-    // a NULL element becomes a named script error instead of the strlen that
-    // faults inside whatever std::string is being built from it.
+
     for (int n = 0; n < count; n++) {
         if (items[n] == nullptr) {
             fail("argument %d element %d is NULL", i + 1, n);

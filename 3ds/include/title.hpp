@@ -53,8 +53,6 @@ class Title {
 public:
     ~Title(void);
 
-    // Vend a backup facet (Save or Extdata) of this Title. The returned target
-    // holds a reference back to this Title, so keep it shorter-lived.
     BackupTarget backup(BackupKind kind);
 
     bool accessibleSave(void);
@@ -82,18 +80,14 @@ public:
     std::vector<std::u16string> saves(void);
     const std::string& shortDescription(void) const;
     CardType SPICardType(void);
-    // True for a DS cartridge that keeps its save in on-cart NAND rather than on
-    // an SPI chip. Backing one up drives the cartridge directly for a minute or
-    // more, so the UI warns before starting; see DSCardNand.
+
     bool cardNandSave(void) const;
     u32 uniqueId(void);
 
     char productCode[16];
 
 private:
-    // Fill `names`/`fullPaths` with the "New..." entry, the sorted backup folders
-    // under `basePath`, then any configured additional folders. Shared by the
-    // save and extdata halves of refreshDirectories (descending = save order).
+
     void loadBackupList(const std::u16string& basePath, const std::vector<std::u16string>& additionalFolders, bool descending,
         std::vector<std::u16string>& names, std::vector<std::u16string>& fullPaths);
 

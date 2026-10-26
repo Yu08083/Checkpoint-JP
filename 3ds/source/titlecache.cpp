@@ -30,38 +30,30 @@
 #include <cstring>
 
 namespace {
-    // Field layout of one cache entry. The single source of truth for the format;
-    // encode() and decode() are mirror images over these offsets.
-    constexpr size_t OFF_ID         = 0;   // u64
-    constexpr size_t OFF_PRODUCT    = 8;   // 16 bytes
-    constexpr size_t OFF_ACCESS     = 24;  // u8 bitfield: bit0 save, bit1 GBA raw
-    constexpr size_t OFF_ACCESS_EXT = 25;  // u8 bool
-    constexpr size_t OFF_SHORT      = 26;  // 0x40
-    constexpr size_t OFF_LONG       = 90;  // 0x80
-    constexpr size_t OFF_SAVE_PATH  = 218; // 256
-    constexpr size_t OFF_EXT_PATH   = 474; // 256
-    constexpr size_t OFF_MEDIA      = 730; // u8
-    constexpr size_t OFF_FS_CARD    = 731; // u8
-    constexpr size_t OFF_CARD       = 732; // u8
-    constexpr size_t OFF_ICON       = 733; // ICON_BYTES
+
+    constexpr size_t OFF_ID         = 0;
+    constexpr size_t OFF_PRODUCT    = 8;
+    constexpr size_t OFF_ACCESS     = 24;
+    constexpr size_t OFF_ACCESS_EXT = 25;
+    constexpr size_t OFF_SHORT      = 26;
+    constexpr size_t OFF_LONG       = 90;
+    constexpr size_t OFF_SAVE_PATH  = 218;
+    constexpr size_t OFF_EXT_PATH   = 474;
+    constexpr size_t OFF_MEDIA      = 730;
+    constexpr size_t OFF_FS_CARD    = 731;
+    constexpr size_t OFF_CARD       = 732;
+    constexpr size_t OFF_ICON       = 733;
 
     constexpr size_t SHORT_LEN     = 0x40;
     constexpr size_t LONG_LEN      = 0x80;
     constexpr size_t PATH_LEN      = 256;
-    constexpr size_t ICON_BYTES    = 0x900 * 2; // bigIconData: 0x900 u16 pixels
-    constexpr size_t DS_ICON_BYTES = 0x400 * 2; // decoded 32x32 DS icon pixels
+    constexpr size_t ICON_BYTES    = 0x900 * 2;
+    constexpr size_t DS_ICON_BYTES = 0x400 * 2;
 
-    // Copies a UTF-8 string into a fixed field of `fieldLen` bytes, always leaving
-    // room for a terminating NUL. The SMDH short/long descriptions are 0x40/0x80
-    // UTF-16 units, which can expand to more UTF-8 bytes than the field holds
-    // (Japanese/emoji titles), so the copy MUST be clamped or it overruns the
-    // packed entry. When the clamp lands mid-sequence we back off to the previous
-    // codepoint boundary so a partial UTF-8 sequence is never written. The entry
-    // is memset to 0 up front, so the unwritten tail is already the NUL padding.
     void copyClamped(u8* dst, size_t offset, const std::string& src, size_t fieldLen)
     {
         size_t n = std::min(src.length(), fieldLen - 1);
-        // back off out of the middle of a multibyte sequence
+
         while (n > 0 && (static_cast<u8>(src[n]) & 0xC0) == 0x80) {
             n--;
         }
@@ -74,7 +66,7 @@ void TitleCache::encode(u8* dst, Title& title, IconStore& icons)
     std::memset(dst, 0, ENTRY_SIZE);
 
     u64 id = title.id();
-    // bit 0: regular save accessible, bit 1: GBA VC raw save accessible
+
     u8 accessibleSaveRaw         = title.accessibleSave() ? 1 : (title.isGBAVC() ? 2 : 0);
     bool accessibleExtdata       = title.accessibleExtdata();
     std::string shortDescription = title.shortDescription();
@@ -86,9 +78,7 @@ void TitleCache::encode(u8* dst, Title& title, IconStore& icons)
     CardType card                = title.SPICardType();
 
     if (cardType == CARD_CTR) {
-        // The probe already read this title's SMDH and stored its icon bytes in
-        // `icons`; reuse them so the full-scan export doesn't read the SMDH a
-        // second time. Fall back to a fresh SMDH read only on a cache miss.
+
         u16 iconPixels[ICON_BYTES / sizeof(u16)];
         if (icons.copyCtrPixels(id, iconPixels)) {
             std::memcpy(dst + OFF_ICON, iconPixels, ICON_BYTES);
@@ -102,8 +92,7 @@ void TitleCache::encode(u8* dst, Title& title, IconStore& icons)
         }
     }
     else if (media == MEDIATYPE_NAND) {
-        // DSiWare: the icon field is sized for a CTR icon; the smaller decoded
-        // 32x32 DS icon (DS_ICON_BYTES) sits in its head, rest stays zero.
+
         u16 iconPixels[DS_ICON_BYTES / sizeof(u16)];
         if (icons.copyDsPixels(id, iconPixels)) {
             std::memcpy(dst + OFF_ICON, iconPixels, DS_ICON_BYTES);
@@ -149,9 +138,6 @@ Title TitleCache::decode(const u8* src, IconStore& icons)
     std::memcpy(&cardType, src + OFF_FS_CARD, sizeof(u8));
     std::memcpy(&card, src + OFF_CARD, sizeof(u8));
 
-    // encode() clamps to FIELD_LEN-1 and zero-fills, but a stale/corrupt cache
-    // could carry an unterminated field; force NUL so the char[] -> string
-    // constructions below can't run off the end.
     shortDescription[SHORT_LEN - 1] = 0;
     longDescription[LONG_LEN - 1]   = 0;
     savePath[PATH_LEN - 1]          = 0;
@@ -165,8 +151,7 @@ Title TitleCache::decode(const u8* src, IconStore& icons)
         StringUtils::UTF8toUTF16(extdataPath), media, cardType, card);
 
     if (cardType == CARD_CTR) {
-        // OFF_ICON is not u16-aligned in the packed entry; copy into an aligned
-        // buffer before handing the pixels to the store.
+
         u16 bigIconData[0x900];
         std::memcpy(bigIconData, src + OFF_ICON, ICON_BYTES);
         icons.storeCtrIcon(id, bigIconData);

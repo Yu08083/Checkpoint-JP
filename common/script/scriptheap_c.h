@@ -29,11 +29,6 @@
 
 #include <stddef.h>
 
-/* The C face of ScriptHeap, for picoc's stdlib (C). A script's malloc() and
- * free() are these, so an aborted run reclaims what the script allocated as
- * well as what the bindings handed it — see scriptheap.hpp for why the script's
- * own free() cannot be trusted to run. */
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -42,8 +37,6 @@ void* ckpt_script_malloc(size_t size);
 void* ckpt_script_calloc(size_t count, size_t size);
 void* ckpt_script_realloc(void* ptr, size_t size);
 
-/* Frees a block this heap owns. A pointer it does not own — a borrowed json
- * element, a double free — is ignored instead of reaching the real free(). */
 void ckpt_script_free(void* ptr);
 
 #ifdef __cplusplus

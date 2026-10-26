@@ -29,10 +29,9 @@
 #include <algorithm>
 
 namespace {
-    // Tab stops, in columns.
+
     constexpr size_t TAB_WIDTH = 4;
-    // Smallest and largest sensible wrap width; guards a platform that hands in
-    // a nonsense tile size before its geometry is known.
+
     constexpr size_t MIN_WIDTH = 16, MAX_WIDTH = 200;
 }
 
@@ -64,17 +63,12 @@ void ScriptConsole::reset(void)
     mIoSlot     = false;
 }
 
-// Stops a bar without emptying it: what it reached, and what it was working
-// on, stay on screen. Only a rate is dropped — nothing is moving any more.
 void ScriptConsole::idle(Layer& layer)
 {
     layer.active = false;
     layer.rate   = 0.0;
 }
 
-// The IO bar between phases: no counts (the next phase measures something
-// else entirely), and the script's stage note as its label, so the row says
-// what is going on even while nothing native is running.
 void ScriptConsole::idleIo(void)
 {
     mIo       = Layer{};
@@ -104,8 +98,7 @@ void ScriptConsole::write(const char* data, size_t len)
     for (size_t i = 0; i < len; i++) {
         const char c = data[i];
         if (c == '\n') {
-            // Close the row. An empty run of newlines still produces blank
-            // rows, which is what a script printing "\n\n" means to see.
+
             if (!mOpen) {
                 appendChar(' ');
                 mLines.back().clear();
@@ -119,7 +112,7 @@ void ScriptConsole::write(const char* data, size_t len)
             }
         }
         else if (c == '\r' || (unsigned char)c < 0x20 || c == 0x7F) {
-            continue; // control characters have no cell in the pane
+            continue;
         }
         else {
             appendChar(c);
@@ -145,9 +138,7 @@ void ScriptConsole::beginLayer(size_t layer, std::string label, long long total)
     mLayers[layer].total  = total;
     mLayers[layer].active = true;
     mLayerSlots           = std::max(mLayerSlots, layer + 1);
-    // Moving on to a new item at this depth invalidates everything under it:
-    // those labels name work that has stopped, so they are dropped rather than
-    // left to sit under a bar as if they were still current.
+
     for (size_t deeper = layer + 1; deeper < MAX_LAYERS; deeper++) {
         mLayers[deeper] = Layer{};
     }
@@ -171,8 +162,7 @@ void ScriptConsole::setLayerLabel(size_t layer, std::string label)
         return;
     }
     std::lock_guard<std::mutex> lock(mMutex);
-    // Not gated on `active`: relabelling an idle bar is how a script says what
-    // the pause between items is for.
+
     mLayers[layer].label = std::move(label);
 }
 
@@ -196,8 +186,7 @@ void ScriptConsole::clearProgress(void)
     }
     mIo = Layer{};
     mIoNote.clear();
-    // The one call that says "no progress at all any more", so it is also the
-    // one that gives the reserved slots back.
+
     mLayerSlots = 0;
     mIoSlot     = false;
 }
@@ -206,8 +195,7 @@ void ScriptConsole::setIoNote(std::string note)
 {
     std::lock_guard<std::mutex> lock(mMutex);
     mIoNote = std::move(note);
-    // Claiming the slot here is the point: the bar is on screen, labelled with
-    // the stage, before any native IO has started.
+
     mIoSlot = true;
     if (!mIo.active) {
         idleIo();
@@ -229,18 +217,14 @@ void ScriptConsole::beginIo(std::string label, long long total)
 
 void ScriptConsole::sampleIoRate(void)
 {
-    // The window closes twice a second: often enough to react to a stall,
-    // seldom enough that the figure on screen is a speed and not a flicker.
-    // The clock read itself is per call — it lands on the copy loop, so keep
-    // this function to exactly that one syscall-free read and no allocation.
+
     const auto now    = std::chrono::steady_clock::now();
     const double secs = std::chrono::duration<double>(now - mIoRateAt).count();
     if (secs < 0.5) {
         return;
     }
     const double sample = (double)(mIo.done - mIoRateDone) / secs;
-    // Smoothed, or the figure jitters by megabytes between frames and reads as
-    // noise rather than as a speed.
+
     mIo.rate    = mIo.rate > 0.0 ? mIo.rate * 0.6 + sample * 0.4 : sample;
     mIoRateAt   = now;
     mIoRateDone = mIo.done;
@@ -316,9 +300,6 @@ std::string ScriptConsole::tail(size_t maxBytes) const
 {
     std::lock_guard<std::mutex> lock(mMutex);
 
-    // Walk back from the newest line until the joined text would exceed the
-    // budget, so the tail always ends on the last thing the script said — which
-    // is where a picoc diagnostic is.
     size_t bytes = 0, first = mLines.size();
     while (first > 0) {
         const size_t cost = mLines[first - 1].size() + 1;
@@ -338,12 +319,6 @@ std::string ScriptConsole::tail(size_t maxBytes) const
     return out;
 }
 
-/* ---- C shim ------------------------------------------------------------- */
-/* picoc's stdlib and platform layer are C; these are the only entry points
- * they need. ckpt_console_stdout() hands them a stream whose bytes land in the
- * console, replacing the "point stdout's buffer at a static array and read it
- * back after the run" capture that made output invisible until the end. */
-
 extern "C" {
 
 void ckpt_console_write(const char* data, int len)
@@ -353,8 +328,6 @@ void ckpt_console_write(const char* data, int len)
     }
 }
 
-// newlib spells the length parameter with its own typedef (size_t on both
-// toolchains); using the macro keeps the signature funopen wants exactly.
 static int consoleStreamWrite(void* cookie, const char* buf, _READ_WRITE_BUFSIZE_TYPE n)
 {
     (void)cookie;
@@ -364,9 +337,7 @@ static int consoleStreamWrite(void* cookie, const char* buf, _READ_WRITE_BUFSIZE
 
 FILE* ckpt_console_stdout(void)
 {
-    // Created once and never closed: picoc reinitialises per run, but the
-    // stream is stateless and shared. Unbuffered so each printf reaches the
-    // pane on the frame it happens, not whenever a 4 KB buffer fills.
+
     static FILE* stream = nullptr;
     if (stream == nullptr) {
         stream = funopen(nullptr, nullptr, consoleStreamWrite, nullptr, nullptr);
@@ -374,8 +345,7 @@ FILE* ckpt_console_stdout(void)
             setvbuf(stream, nullptr, _IONBF, 0);
         }
     }
-    // A failed funopen degrades to the real stdout: output goes nowhere
-    // visible (as before this change), but nothing crashes.
+
     return stream != nullptr ? stream : stdout;
 }
 }

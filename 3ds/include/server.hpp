@@ -40,39 +40,26 @@ namespace Server {
 
     using HttpHandler = std::function<HttpResponse(const std::string& path, const std::string& requestData)>;
 
-    // A streamed upload: for a registered upload path the server writes the raw
-    // request body to a temp file (instead of buffering it in RAM), so an upload
-    // far larger than MAX_REQUEST_SIZE is handled without heap pressure. The
-    // handler is handed the header block plus the body temp-file path and its
-    // length; the server deletes the temp file once the handler returns.
     struct UploadRequest {
-        std::string headers;  // request line + header block, without the trailing CRLFCRLF
-        std::string bodyPath; // temp file holding the raw request body (SD-relative, e.g. /3ds/...)
-        uint64_t bodyLength;  // declared Content-Length (bytes streamed to bodyPath)
+        std::string headers;
+        std::string bodyPath;
+        uint64_t bodyLength;
     };
 
     using UploadHandler = std::function<HttpResponse(const UploadRequest&)>;
 
-    // Binds and listens on `port` (Configuration::serverPort). The port is read
-    // once here, so a change in Settings takes effect on the next launch.
     void init(uint16_t port);
     void exit(void);
-    // Signals the network loop to stop (it exits within one iteration) without
-    // tearing anything down. Needed at shutdown so the thread ends before
-    // Threads::exit joins the pool; the socket cleanup in Server::exit runs later.
+
     void requestStop(void);
     bool isRunning(void);
     std::string getAddress(void);
-    // Port the server is bound to, 0 if it never came up. Not necessarily
-    // Configuration::serverPort: Settings may have changed that since launch.
+
     uint16_t getPort(void);
 
     void registerHandler(const std::string& path, HttpHandler handler);
     void unregisterHandler(const std::string& path);
 
-    // Registers a streaming upload handler for `path`; the body is written to
-    // `tmpPath` (SD-relative) before the handler runs. Unregistered via
-    // unregisterHandler.
     void registerUploadHandler(const std::string& path, const std::string& tmpPath, UploadHandler handler);
 }
 

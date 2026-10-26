@@ -32,31 +32,18 @@
 #include <string>
 
 namespace Transfer {
-    // A parsed send destination. The screen only prompts for the raw "ip:port"
-    // string and hands it here; validation policy lives with the transport.
+
     struct TransferTarget {
         std::string ip;
         u16 port = 0;
     };
 
-    // Parses "ip:port"; nullopt on a missing colon, empty ip, or a port outside
-    // [1, 65535].
     std::optional<TransferTarget> parseTarget(const std::string& ipPort);
 
-    // True iff `pin` is exactly 4 ASCII digits (the receiver token format).
     bool validPin(const std::string& pin);
 
-    // Deletes temp archives a previous crash/power-loss may have left behind:
-    // transfer_recv.zip and every transfer_send_*.zip under /3ds/Checkpoint/.
-    // Called once on boot; normal exits already clean these via scope guards.
     void sweepTempFiles(void);
 
-    // `selectedTitleId` is the title whose backup list the Receive row was opened
-    // from (0 when there is none). A sender that cannot name the title — chlink
-    // sending a folder outside a Checkpoint SD layout, and every 3DS backup
-    // folder, whose "0x%05X " prefix is a unique id, not a title id — leaves the
-    // receiver with nothing to match on; the selected title is then the
-    // destination the user actually pointed at, instead of an "Unknown" folder.
     bool startReceiver(std::string& outError, u64 selectedTitleId = 0);
     void stopReceiver(void);
     bool receiverRunning(void);
@@ -70,11 +57,6 @@ namespace Transfer {
     void clearReceiverNotice(void);
     void clearReceiverCompletion(void);
 
-    // Where a send stopped. The screen owns the user-facing message for each
-    // stage; `detail` carries only receiver-echoed text (HTTP error body or
-    // status line), never Checkpoint-authored prose.
-    // Cancelled is not an error: the user asked to stop (hold B), so the screen
-    // shows a neutral info message instead of an error overlay.
     enum class SendStage { EmptyBackup, PayloadTooLarge, Zip, Socket, Resolve, Connect, Send, Response, Cancelled };
 
     struct SendOutcome {
@@ -83,8 +65,6 @@ namespace Transfer {
         std::string detail;
     };
 
-    // Blocking; runs on the TransferJob worker. Progress flows through
-    // TransferStatus (beginNetwork/addBytesDone) and is drawn by the main loop.
     SendOutcome sendBackup(const Title& title, const std::u16string& backupPath, const std::string& backupName, const std::string& dataType,
         const std::string& ip, u16 port, const std::string& token);
 }

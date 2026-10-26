@@ -33,8 +33,7 @@
 ChoiceOverlay::ChoiceOverlay(Screen& screen, const std::string& text, Button first, Button second, u32 dismissKeys)
     : Overlay(screen), mText(text), mButtons{std::move(first), std::move(second)}, mHid(2, 2), mDismissKeys(dismissKeys)
 {
-    // Size the card to the wrapped prompt (same math as MessageOverlay), so a
-    // long prompt grows the box instead of spilling out of it.
+
     mLayout = ModalChrome::fitText(mText, SIZE, false);
     mPosx   = ceilf((320 - StringUtils::textWidth(mText, SIZE)) / 2);
 
@@ -74,7 +73,7 @@ void ChoiceOverlay::update(const InputState& input)
 
     for (size_t i = 0; i < 2; i++) {
         if (mClick[i]->released() || (kDown & mButtons[i].extraKeys) || ((kDown & KEY_A) && mHid.index() == i)) {
-            auto action = mButtons[i].action; // copy to the stack: the callback may removeOverlay(), destroying *this
+            auto action = mButtons[i].action;
             action();
             return;
         }

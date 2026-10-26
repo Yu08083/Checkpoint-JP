@@ -53,9 +53,7 @@
 #include <unistd.h>
 
 namespace {
-    // Hard upper bound on a single request we are willing to buffer in RAM.
-    // The whole request is held in memory, so this caps worst-case allocation
-    // and prevents a malformed/malicious Content-Length from exhausting the heap.
+
     static const size_t MAX_REQUEST_SIZE = 32 * 1024 * 1024;
     std::atomic_flag serverRunning       = ATOMIC_FLAG_INIT;
     s32 serverSocket                     = -1;
@@ -63,16 +61,12 @@ namespace {
     std::string serverAddress;
     u16 serverPort = 0;
 
-    // Cap on the header block alone (the upload body is streamed to SD, so it is
-    // not bounded by this). Guards against a client that never sends a header
-    // terminator and grows us unbounded.
     static const size_t MAX_HEADER_SIZE = 128 * 1024;
 
     std::map<std::string, Server::HttpHandler> handlers;
-    // Streaming upload handlers keyed by path: {temp body file path, handler}.
+
     std::map<std::string, std::pair<std::string, Server::UploadHandler>> uploadHandlers;
-    // handlers/uploadHandlers are mutated from the main thread (register/unregister
-    // on receiver start/stop) while the network thread looks them up, so guard both.
+
     std::mutex handlersMutex;
 
     std::string extractPath(const std::string& request)
@@ -90,8 +84,7 @@ namespace {
 
     static size_t parseContentLength(const std::string& headers)
     {
-        // headerValue is case-insensitive, so every spelling a client may send is
-        // covered without listing them here.
+
         std::string value = TransferProto::headerValue(headers, "Content-Length");
         if (value.empty()) {
             return 0;
@@ -99,15 +92,8 @@ namespace {
         return (size_t)strtoul(value.c_str(), nullptr, 10);
     }
 
-    // Per-recv idle timeout. The server is single-threaded, so without a bound a
-    // stalled (or malicious) client would hang the whole receiver indefinitely.
-    // The 3DS SOC layer doesn't support SO_RCVTIMEO, so we gate recv with poll.
     static const int RECV_TIMEOUT_MS = 15000;
 
-    // Poll in short slices instead of one long wait so a cancel request is noticed
-    // within a second even when the sender has stalled; idleMs accumulates across
-    // empty slices to preserve the overall idle timeout. Returns bytes read (>0),
-    // 0 on a clean close or idle timeout, or -1 on a cancel/poll error to abandon.
     static const int POLL_SLICE_MS = 1000;
 
     static ssize_t pollRecv(s32 sock, char* buf, size_t len, int& idleMs, bool trackCancel)
@@ -147,9 +133,6 @@ namespace {
         send(clientSocket, response.body.c_str(), response.body.length(), 0);
     }
 
-    // Streams the body of an upload request to `tmpPath`, tracking progress and
-    // honouring a receive cancel. `leftover` is the body already read while
-    // parsing the header. Returns true when the full body was written.
     static bool streamBodyToFile(s32 clientSocket, const std::u16string& tmpPath, size_t contentLength, const char* leftover, size_t leftoverLen)
     {
         FSStream out(Archive::sdmc(), tmpPath, FS_OPEN_WRITE, (u32)contentLength);
@@ -175,7 +158,7 @@ namespace {
         while (written < contentLength) {
             ssize_t received = pollRecv(clientSocket, buffer.get(), RECV_CHUNK, idleMs, true);
             if (received <= 0) {
-                ok = false; // clean close, idle timeout, or cancel: incomplete body
+                ok = false;
                 break;
             }
             size_t toWrite = (size_t)received;
@@ -192,8 +175,7 @@ namespace {
 
     static void handleHttpRequest(s32 clientSocket)
     {
-        // Read only up to and including the header terminator; the body is either
-        // streamed to disk (upload paths) or read into RAM afterwards (others).
+
         std::string data;
         data.reserve(4096);
         constexpr size_t RECV_CHUNK = 32 * 1024;
@@ -224,7 +206,6 @@ namespace {
         size_t contentLength = parseContentLength(headers);
         size_t bodyStart     = headerEnd + 4;
 
-        // Streaming upload path.
         std::string tmpPath;
         Server::UploadHandler uploadHandler;
         bool isUpload = false;
@@ -243,8 +224,7 @@ namespace {
             size_t leftoverLen    = data.size() - bodyStart;
             bool complete         = streamBodyToFile(clientSocket, tmpU16, contentLength, leftover, leftoverLen);
             if (!complete) {
-                // Cancelled, stalled, or dropped mid-upload: drop the request and
-                // clear the transfer UI; the handler never runs on a partial body.
+
                 FSUSER_DeleteFile(Archive::sdmc(), fsMakePath(PATH_UTF16, tmpU16.data()));
                 TransferStatus::end();
                 Logging::info("Upload abandoned before the full body arrived.");
@@ -257,7 +237,6 @@ namespace {
             return;
         }
 
-        // Non-upload request: buffer the (small) remainder in RAM.
         if (contentLength > MAX_REQUEST_SIZE) {
             std::string body = "{\"ok\":false,\"error\":\"Payload too large\"}";
             std::string header =
@@ -300,7 +279,7 @@ namespace {
 
     static void networkLoop()
     {
-        // Set server socket to non-blocking
+
         fcntl(serverSocket, F_SETFL, fcntl(serverSocket, F_GETFL, 0) | O_NONBLOCK);
 
         int lastErrno        = 0;
@@ -321,7 +300,7 @@ namespace {
 
             if (clientSocket >= 0) {
                 flushSuppressed();
-                // Set client socket to blocking for simpler sending
+
                 fcntl(clientSocket, F_SETFL, fcntl(clientSocket, F_GETFL, 0) & ~O_NONBLOCK);
                 handleHttpRequest(clientSocket);
                 close(clientSocket);
@@ -337,8 +316,7 @@ namespace {
                 }
             }
 
-            // Prevent 100% CPU usage
-            svcSleepThread(100000000); // 100ms
+            svcSleepThread(100000000);
         }
 
         flushSuppressed();

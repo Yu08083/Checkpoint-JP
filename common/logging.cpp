@@ -50,8 +50,7 @@ namespace {
 
     std::mutex logMutex;
     constexpr size_t LOG_BUFFER_SIZE = 8192;
-    // Cap the in-memory session log so it can't grow unbounded over a long session
-    // (it is copied wholesale on every /logs/memory hit). Keep a trailing window.
+
     constexpr size_t APPLICATION_LOGS_CAP = 256 * 1024;
     std::string logBuffer;
     FILE* logFile = nullptr;
@@ -73,7 +72,6 @@ void Logging::init()
 {
     startTime = std::chrono::steady_clock::now();
 
-    // Get current date for log filename
     auto now        = std::chrono::system_clock::now();
     auto now_time_t = std::chrono::system_clock::to_time_t(now);
     std::tm* now_tm = std::localtime(&now_time_t);
@@ -102,11 +100,6 @@ void Logging::init()
         std::lock_guard<std::mutex> lock(logMutex);
         flushLogBuffer();
 
-        // Read through the already-open append handle instead of a second fopen():
-        // Switch's FS sysmodule refuses opening a file for read while it is open
-        // for write, so a separate read handle returns null there and 404s. The
-        // handle is opened "a+", so reads are non-destructive and writes still
-        // append; we fflush + rewind, read, then seek back to end.
         if (logFile == nullptr) {
             return {404, "text/plain", "Log file not found"};
         }
@@ -193,15 +186,13 @@ void Logging::log(LogLevel level, const std::string& message)
     std::lock_guard<std::mutex> lock(logMutex);
     applicationLogs += logEntry;
     if (applicationLogs.size() > APPLICATION_LOGS_CAP) {
-        // Drop the oldest data, trimming to the next line boundary so the window
-        // never starts mid-entry.
+
         size_t drop = applicationLogs.size() - APPLICATION_LOGS_CAP;
         size_t nl   = applicationLogs.find('\n', drop);
         applicationLogs.erase(0, nl == std::string::npos ? drop : nl + 1);
     }
     logBuffer += logEntry;
 
-    // Flush if buffer is getting full or for important messages
     if (logFile != nullptr) {
         if (logBuffer.size() >= LOG_BUFFER_SIZE || level == LogLevel::ERROR || level == LogLevel::WARN) {
             flushLogBuffer();
@@ -229,9 +220,7 @@ namespace {
 
     [[noreturn]] void terminateHandler()
     {
-        // Guard against re-entry: if formatting/logging below throws (e.g. the
-        // terminate was an OOM and std::format allocates again), don't recurse
-        // into ourselves — bail straight to abort so Atmosphere still reports.
+
         static std::atomic<bool> handling{false};
         if (handling.exchange(true)) {
             std::abort();
@@ -252,13 +241,11 @@ namespace {
 
         try {
             Logging::error("[FATAL] std::terminate: {}", what);
-            Logging::exit(); // flush + close so the breadcrumb survives the crash
+            Logging::exit();
         }
         catch (...) {
         }
 
-        // Hand back to the default handler so Atmosphere's creport still fires
-        // with the faulting PC (feed that to tools/nx-crash-bt.py).
         if (prevTerminate) {
             prevTerminate();
         }

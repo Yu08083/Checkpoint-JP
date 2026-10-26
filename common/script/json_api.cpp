@@ -24,11 +24,6 @@
  *         reasonable ways as different from the original version.
  */
 
-// The json_* script API: a port of PKSM's nlohmann wrappers (pksm_api.cpp)
-// Platform-neutral — nothing here touches the UI bridge or the catalog, so the
-// Switch target reuses it as-is. Getter type mismatches fail the script via
-// ProgramFail instead of letting nlohmann throw through the interpreter.
-
 #include "json.hpp"
 #include "scriptargs.hpp"
 #include "scriptheap.hpp"
@@ -42,15 +37,12 @@ extern "C" {
 }
 
 namespace {
-    // struct JSON* is opaque to scripts, so the only thing checkable at the
-    // boundary is that a pointer was passed at all — a NULL one used to fault
-    // inside nlohmann, several frames from the call that got it wrong.
+
     nlohmann::json* tree(const ScriptArgs& args, int i)
     {
         return (nlohmann::json*)args.ptr(i);
     }
 
-    // The heap's destroy function for a tree: json_new's `new`, undone.
     void deleteJson(void* ptr)
     {
         delete (nlohmann::json*)ptr;
@@ -60,11 +52,9 @@ namespace {
 void ckpt_json_new(struct ParseState* Parser, struct Value* ReturnValue, struct Value** Param, int NumArgs)
 {
     nlohmann::json* ret = new nlohmann::json;
-    // explicitly set it to invalid, like PKSM: a json_new the script never
-    // json_parse's answers 0 to json_is_valid
+
     *ret = nlohmann::json::parse("{", nullptr, false);
-    // Run-scoped from here on: a script that aborts between json_new and
-    // json_delete no longer strands the whole tree.
+
     ScriptHeap::get().adopt(ret, deleteJson);
     ReturnValue->Val->Pointer = (void*)ret;
 }
@@ -78,11 +68,7 @@ void ckpt_json_parse(struct ParseState* Parser, struct Value* ReturnValue, struc
 
 void ckpt_json_delete(struct ParseState* Parser, struct Value* ReturnValue, struct Value** Param, int NumArgs)
 {
-    // json_array_element/json_object_element return borrowed pointers into a
-    // parent tree with the same struct JSON* type as an owned root, so this is
-    // the one place that can tell the two apart: only a root json_new adopted
-    // is in the heap. Deleting a borrowed element used to corrupt the
-    // allocator; now it fails the script where the mistake was made.
+
     const ScriptArgs args(Parser, Param, NumArgs, "json_delete");
     if (!ScriptHeap::get().release(tree(args, 0))) {
         args.fail("argument 1 is not a json_new root");
@@ -149,7 +135,6 @@ void ckpt_json_get_string(struct ParseState* Parser, struct Value* ReturnValue, 
     ReturnValue->Val->Pointer = strToRet(get->get_ref<std::string&>());
 }
 
-// nlohmann's size(): array/object element count, 1 for scalars, 0 for null.
 void ckpt_json_array_size(struct ParseState* Parser, struct Value* ReturnValue, struct Value** Param, int NumArgs)
 {
     ReturnValue->Val->Integer = (int)tree(ScriptArgs(Parser, Param, NumArgs, "json_array_size"), 0)->size();

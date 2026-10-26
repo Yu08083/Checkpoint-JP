@@ -37,7 +37,7 @@
 
 namespace {
     constexpr float BODY_SIZE = 0.5f, ROW_SIZE = 0.46f, BTN_SIZE = 0.5f;
-    // Button row along the tile's lower edge, above the hint line.
+
     constexpr int BTN_H = 30, BTN_GAP = 10;
 
     int buttonRowY(void)
@@ -45,10 +45,6 @@ namespace {
         return ScriptTile::uiBodyBottom() - BTN_H - 6;
     }
 
-    // List rows are single-line, but script-supplied strings can carry newlines
-    // (3DS SMDH long titles store the two-line marquee form as "line1\nline2").
-    // C2D_DrawText honours those breaks and wraps the row mid-screen, so collapse
-    // any CR/LF run to a single space before the row is measured and drawn.
     std::string flattenLine(const std::string& s)
     {
         std::string out;
@@ -69,14 +65,11 @@ namespace {
     }
 }
 
-/* ---- shared tile chrome ------------------------------------------------- */
-
 ScriptTileOverlay::ScriptTileOverlay(Screen& screen, std::string title) : Overlay(screen), mTitle(std::move(title)) {}
 
 void ScriptTileOverlay::drawBottom(void) const
 {
-    // No dim: the tile covers the whole bottom screen already, and the top
-    // screen must stay untouched so the log pane keeps reading.
+
     const int bodyY = ScriptTile::uiFrame(mTitle, headerNote(), COLOR_ACCENT, ScriptTile::Z);
     drawBody(bodyY);
     ScriptTile::uiHints(hints(), ScriptTile::Z);
@@ -94,8 +87,6 @@ void ScriptTileOverlay::drawWrappedBody(const std::string& text, int bodyY) cons
     const float maxW    = (float)(ScriptTile::UI_W - 2 * ScriptTile::PAD);
     std::string wrapped = StringUtils::wrap(text, BODY_SIZE, maxW);
 
-    // Cut to the lines that fit above the button row rather than letting the
-    // paragraph run under it.
     const float lineH  = StringUtils::textHeight("A", BODY_SIZE);
     const int maxLines = std::max(1, (int)((buttonRowY() - 6 - bodyY) / (lineH > 0 ? lineH : 1)));
     int lines          = 1;
@@ -107,8 +98,6 @@ void ScriptTileOverlay::drawWrappedBody(const std::string& text, int bodyY) cons
     }
     text_pool.drawWrapped(wrapped, (float)(ScriptTile::UI_X + ScriptTile::PAD), (float)bodyY, BODY_SIZE, COLOR_TEXT, maxW, ScriptTile::Z);
 }
-
-/* ---- gui_message -------------------------------------------------------- */
 
 ScriptMessageOverlay::ScriptMessageOverlay(Screen& screen, std::string text)
     : ScriptTileOverlay(screen, ScriptRunner::get().scriptName()), mText(std::move(text))
@@ -127,9 +116,7 @@ void ScriptMessageOverlay::drawBody(int bodyY) const
 
 std::string ScriptMessageOverlay::hints(void) const
 {
-    // Only this dialog's own keys: the log scroll hint lives on the top screen,
-    // which no dialog covers, so every script dialog's hint line is about the
-    // dialog and nothing else.
+
     return std::string(GLYPH_A) + " OK";
 }
 
@@ -141,11 +128,8 @@ void ScriptMessageOverlay::update(const InputState& input)
     }
 }
 
-/* ---- gui_confirm -------------------------------------------------------- */
-
 namespace {
-    // Two half-width buttons on the tile's button row, confirm on the left, the
-    // same order YesNoOverlay uses everywhere else in the app.
+
     constexpr int confirmHalf(void)
     {
         return (ScriptTile::UI_W - 2 * ScriptTile::PAD - BTN_GAP) / 2;
@@ -181,8 +165,7 @@ void ScriptConfirmOverlay::drawBody(int bodyY) const
 
 std::string ScriptConfirmOverlay::hints(void) const
 {
-    // A activates whichever button is highlighted, which is not always Confirm —
-    // so the hint says "select", the same word the pickers use for A.
+
     return std::string(GLYPH_A) + " " + i18n::t("overlay.select") + "     " + GLYPH_B + " " + i18n::t("common.cancel");
 }
 
@@ -204,8 +187,6 @@ void ScriptConfirmOverlay::update(const InputState& input)
         answer(std::move(resp));
     }
 }
-
-/* ---- shared list body --------------------------------------------------- */
 
 ScriptListOverlay::ScriptListOverlay(Screen& screen, std::string prompt, size_t count)
     : ScriptTileOverlay(screen, std::move(prompt)), mCount(count), mCursor(VISIBLE)
@@ -239,8 +220,6 @@ void ScriptListOverlay::drawBody(int bodyY) const
         drawRow(k, rowY, sel);
     }
 }
-
-/* ---- gui_pick_one ------------------------------------------------------- */
 
 ScriptPickOneOverlay::ScriptPickOneOverlay(Screen& screen, const std::string& prompt, std::vector<std::string> items)
     : ScriptListOverlay(screen, prompt, items.size()), mItems(std::move(items))
@@ -282,8 +261,6 @@ void ScriptPickOneOverlay::update(const InputState& input)
     }
 }
 
-/* ---- gui_pick_many ------------------------------------------------------ */
-
 ScriptPickManyOverlay::ScriptPickManyOverlay(Screen& screen, const std::string& prompt, std::vector<std::string> items, std::vector<bool> preselected)
     : ScriptListOverlay(screen, prompt, items.size()), mItems(std::move(items)), mSelected(std::move(preselected))
 {
@@ -305,8 +282,7 @@ std::string ScriptPickManyOverlay::hints(void) const
     if (mCount == 0) {
         return std::string(GLYPH_B) + " " + i18n::t("common.cancel");
     }
-    // X confirms, not START: it is the same key the Switch build uses, and START
-    // already means "close the finished run" on this screen.
+
     return std::string(GLYPH_A) + " " + i18n::t("scripts.toggle") + "   " + GLYPH_X + " " + i18n::t("hint.confirm") + "   " + GLYPH_B + " " +
            i18n::t("common.cancel");
 }

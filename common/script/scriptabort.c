@@ -24,18 +24,6 @@
  *         reasonable ways as different from the original version.
  */
 
-/* The script kill switch.
- *
- * picoc is built with -DDEBUGGER, which makes ParseStatement() call
- * DebugCheckStatement() before every statement it runs. The submodule's
- * debug.c (the interactive debugger those hooks were meant for) is filtered
- * out of the build; this file provides the Debug* symbols instead and turns
- * the per-statement hook into an abort check. When the main thread requests
- * an abort, the next statement fails the run through picoc's normal error
- * path — ProgramFail longjmps to the exit point set in ScriptEngine::run —
- * and ScriptRunner cleans up exactly as for any failed script.
- */
-
 #include "checkpoint_api.h"
 #include "interpreter.h"
 #include <stdatomic.h>
@@ -57,20 +45,17 @@ void ckpt_script_abort_reset(void)
     atomic_store(&gAbortRequested, 0);
 }
 
-/* called by PicocInitialize */
 void DebugInit(Picoc* pc)
 {
     pc->BreakpointCount  = 0;
     pc->DebugManualBreak = false;
 }
 
-/* called by PicocCleanup */
 void DebugCleanup(Picoc* pc)
 {
     (void)pc;
 }
 
-/* called by ParseStatement before every statement executed in RunModeRun */
 void DebugCheckStatement(struct ParseState* Parser)
 {
     if (atomic_load_explicit(&gAbortRequested, memory_order_relaxed)) {

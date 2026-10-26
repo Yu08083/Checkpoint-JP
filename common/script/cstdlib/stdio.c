@@ -1,4 +1,3 @@
-/*  */
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -6,9 +5,6 @@
 #include "interpreter.h"
 #include "scriptconsole_c.h"
 
-/* Checkpoint: neither console has a real stdout, so everything a script prints
- * goes to the live log pane instead. CKPT_STDOUT stands in for `stdout` at
- * every point where picoc's stdlib means "the script's console". */
 #define CKPT_STDOUT (ckpt_console_stdout())
 
 #define MAX_FORMAT (80)
@@ -25,13 +21,12 @@ static int _IOFBFValue       = _IOFBF;
 static int _IOLBFValue       = _IOLBF;
 static int _IONBFValue       = _IONBF;
 static int L_tmpnamValue     = L_tmpnam;
-static int GETS_MAXValue     = 255; /* arbitrary maximum size of a gets() file */
+static int GETS_MAXValue     = 255;
 
 static FILE* stdinValue;
 static FILE* stdoutValue;
 static FILE* stderrValue;
 
-/* our own internal output stream which can output to FILE * or strings */
 typedef struct StdOutStreamStruct
 {
     FILE* FilePtr;
@@ -41,14 +36,12 @@ typedef struct StdOutStreamStruct
 
 } StdOutStream;
 
-/* our representation of varargs within picoc */
 struct StdVararg
 {
     struct Value** Param;
     int NumArgs;
 };
 
-/* initializes the I/O system so error reporting works */
 void BasicIOInit(Picoc* pc)
 {
     pc->CStdOut = CKPT_STDOUT;
@@ -57,18 +50,17 @@ void BasicIOInit(Picoc* pc)
     stderrValue = stderr;
 }
 
-/* output a single character to either a FILE * or a string */
 void StdioOutPutc(int OutCh, StdOutStream* Stream)
 {
     if (Stream->FilePtr != NULL)
     {
-        /* output to stdio stream */
+
         putc(OutCh, Stream->FilePtr);
         Stream->CharCount++;
     }
     else if (Stream->StrOutLen < 0 || Stream->StrOutLen > 1)
     {
-        /* output to a string */
+
         *Stream->StrOutPtr = OutCh;
         Stream->StrOutPtr++;
 
@@ -81,22 +73,21 @@ void StdioOutPutc(int OutCh, StdOutStream* Stream)
     }
 }
 
-/* output a string to either a FILE * or a string */
 void StdioOutPuts(const char* Str, StdOutStream* Stream)
 {
     if (Stream->FilePtr != NULL)
     {
-        /* output to stdio stream */
+
         fputs(Str, Stream->FilePtr);
     }
     else
     {
-        /* output to a string */
+
         while (*Str != '\0')
         {
             if (Stream->StrOutLen < 0 || Stream->StrOutLen > 1)
             {
-                /* output to a string */
+
                 *Stream->StrOutPtr = *Str;
                 Str++;
                 Stream->StrOutPtr++;
@@ -112,12 +103,6 @@ void StdioOutPuts(const char* Str, StdOutStream* Stream)
     }
 }
 
-/* Advance the string cursor after a bounded conversion. snprintf() returns the
-    length it *would* have written, so on truncation the raw return walks the
-    cursor past the caller's buffer and drives StrOutLen negative - which every
-    write path here reads as "unbounded", and the next conversion scribbles off
-    the end. Advance by what was actually stored instead, leaving StrOutLen at 1
-    so the terminator still has a cell. Only ever called with StrOutLen >= 0. */
 static void StdioStrAdvance(StdOutStream* Stream, int CCount)
 {
     int Room    = Stream->StrOutLen > 0 ? Stream->StrOutLen - 1 : 0;
@@ -125,11 +110,10 @@ static void StdioStrAdvance(StdOutStream* Stream, int CCount)
 
     Stream->StrOutPtr += Written;
     Stream->StrOutLen -= Written;
-    /* the count stays the untruncated one: that is what snprintf() returns */
+
     Stream->CharCount += CCount;
 }
 
-/* printf-style format of an int or other word-sized object */
 void StdioFprintfWord(StdOutStream* Stream, const char* Format, unsigned int Value)
 {
     if (Stream->FilePtr != NULL)
@@ -153,7 +137,6 @@ void StdioFprintfWord(StdOutStream* Stream, const char* Format, unsigned int Val
     }
 }
 
-/* printf-style format of a long */
 void StdioFprintfLong(StdOutStream* Stream, const char* Format, uint64_t Value)
 {
     char PlatformFormat[MAX_FORMAT + 1], *FPos = PlatformFormat;
@@ -182,8 +165,7 @@ void StdioFprintfLong(StdOutStream* Stream, const char* Format, uint64_t Value)
             case 'X':
                 UseFormat = PRIX64;
                 break;
-            /* Ignore the %l (long) specifier, because of course we're doing longs in this function
-             */
+
             case 'l':
                 break;
             default:
@@ -219,7 +201,6 @@ void StdioFprintfLong(StdOutStream* Stream, const char* Format, uint64_t Value)
     }
 }
 
-/* printf-style format of a floating point number */
 void StdioFprintfFP(StdOutStream* Stream, const char* Format, double Value)
 {
     if (Stream->FilePtr != NULL)
@@ -243,7 +224,6 @@ void StdioFprintfFP(StdOutStream* Stream, const char* Format, double Value)
     }
 }
 
-/* printf-style format of a pointer */
 void StdioFprintfPointer(StdOutStream* Stream, const char* Format, void* Value)
 {
     if (Stream->FilePtr != NULL)
@@ -267,8 +247,6 @@ void StdioFprintfPointer(StdOutStream* Stream, const char* Format, void* Value)
     }
 }
 
-/* internal do-anything v[s][n]printf() formatting system with output
-    to strings or FILE * */
 int StdioBasePrintf(struct ParseState* Parser, FILE* Stream, char* StrOut, int StrOutLen,
     char* Format, struct StdVararg* Args)
 {
@@ -297,7 +275,7 @@ int StdioBasePrintf(struct ParseState* Parser, FILE* Stream, char* StrOut, int S
     {
         if (*FPos == '%')
         {
-            /* work out what type we're printing */
+
             FPos++;
             ShowType        = NULL;
             OneFormatBuf[0] = '%';
@@ -326,61 +304,60 @@ int StdioBasePrintf(struct ParseState* Parser, FILE* Stream, char* StrOut, int S
                             ShowType = &pc->UnsignedLongType;
                             break;
                         }
-                        // falls through
+
                     case 'o':
                     case 'x':
                     case 'X':
                         ShowType = &pc->IntType;
-                        break; /* integer base conversions */
+                        break;
                     case 'l':
                         ShowLong = 1;
-                        break; /* long integer */
+                        break;
                     case 'e':
                     case 'E':
                         ShowType = &pc->DoubleType;
-                        break; /* double, exponent form */
+                        break;
                     case 'f':
                     case 'F':
                         ShowType = &pc->DoubleType;
-                        break; /* double, fixed-point */
+                        break;
                     case 'g':
                     case 'G':
                         ShowType = &pc->DoubleType;
-                        break; /* double, flexible format */
+                        break;
                     case 'a':
                     case 'A':
                         ShowType = &pc->IntType;
-                        break; /* hexadecimal, 0x- format */
+                        break;
                     case 'c':
                         ShowType = &pc->IntType;
-                        break; /* character */
+                        break;
                     case 's':
                         ShowType = pc->CharPtrType;
-                        break; /* string */
+                        break;
                     case 'p':
                         ShowType = pc->VoidPtrType;
-                        break; /* pointer */
+                        break;
                     case 'n':
                         ShowType = &pc->VoidType;
-                        break; /* number of characters written */
+                        break;
                     case 'm':
                         ShowType = &pc->VoidType;
-                        break; /* strerror(errno) */
+                        break;
                     case '%':
                         ShowType = &pc->VoidType;
-                        break; /* just a '%' character */
+                        break;
                     case '\0':
                         ShowType = &pc->VoidType;
-                        break; /* end of format string */
+                        break;
                 }
 
-                /* copy one character of format across to the OneFormatBuf */
                 if (*FPos != 'l')
                 {
                     OneFormatBuf[OneFormatCount] = *FPos;
                     OneFormatCount++;
                 }
-                /* do special actions depending on the conversion type */
+
                 if (ShowType == &pc->VoidType)
                 {
                     switch (*FPos)
@@ -420,17 +397,16 @@ int StdioBasePrintf(struct ParseState* Parser, FILE* Stream, char* StrOut, int S
                 }
                 else
                 {
-                    /* null-terminate the buffer */
+
                     OneFormatBuf[OneFormatCount] = '\0';
 
-                    /* print this argument */
                     ThisArg =
                         (struct Value*)((char*)ThisArg + MEM_ALIGN(sizeof(struct Value) +
                                                                    TypeStackSizeValue(ThisArg)));
 
                     if (ShowType == &pc->LongType)
                     {
-                        /* show a signed long */
+
                         if (IS_NUMERIC_COERCIBLE(ThisArg))
                         {
                             StdioFprintfLong(&SOStream, OneFormatBuf, ThisArg->Val->LongInteger);
@@ -442,7 +418,7 @@ int StdioBasePrintf(struct ParseState* Parser, FILE* Stream, char* StrOut, int S
                     }
                     else if (ShowType == &pc->UnsignedLongType)
                     {
-                        /* show a unsigned long */
+
                         if (IS_NUMERIC_COERCIBLE(ThisArg))
                         {
                             StdioFprintfLong(
@@ -455,7 +431,7 @@ int StdioBasePrintf(struct ParseState* Parser, FILE* Stream, char* StrOut, int S
                     }
                     else if (ShowType == &pc->IntType)
                     {
-                        /* show a signed integer */
+
                         if (IS_NUMERIC_COERCIBLE(ThisArg))
                         {
                             StdioFprintfWord(&SOStream, OneFormatBuf,
@@ -468,7 +444,7 @@ int StdioBasePrintf(struct ParseState* Parser, FILE* Stream, char* StrOut, int S
                     }
                     else if (ShowType == &pc->UnsignedIntType)
                     {
-                        /* show a signed integer */
+
                         if (IS_NUMERIC_COERCIBLE(ThisArg))
                         {
                             StdioFprintfWord(
@@ -481,7 +457,7 @@ int StdioBasePrintf(struct ParseState* Parser, FILE* Stream, char* StrOut, int S
                     }
                     else if (ShowType == &pc->FloatType)
                     {
-                        /* show a floating point number */
+
                         if (IS_NUMERIC_COERCIBLE(ThisArg))
                         {
                             StdioFprintfFP(&SOStream, OneFormatBuf, ExpressionCoerceFloat(ThisArg));
@@ -493,7 +469,7 @@ int StdioBasePrintf(struct ParseState* Parser, FILE* Stream, char* StrOut, int S
                     }
                     else if (ShowType == &pc->DoubleType)
                     {
-                        /* show a floating point number */
+
                         if (IS_NUMERIC_COERCIBLE(ThisArg))
                         {
                             StdioFprintfFP(
@@ -544,16 +520,12 @@ int StdioBasePrintf(struct ParseState* Parser, FILE* Stream, char* StrOut, int S
         }
         else
         {
-            /* just output a normal character */
+
             StdioOutPutc(*FPos, &SOStream);
             FPos++;
         }
     }
 
-    /* null-terminate. A negative StrOutLen is the unbounded (sprintf) case, not
-       "no room left": upstream only terminated when it was positive, so every
-       sprintf() left its buffer unterminated and the tail of whatever was in it
-       before showed up glued to the new text. */
     if (SOStream.StrOutPtr != NULL && SOStream.StrOutLen != 0)
     {
         *SOStream.StrOutPtr = '\0';
@@ -562,8 +534,6 @@ int StdioBasePrintf(struct ParseState* Parser, FILE* Stream, char* StrOut, int S
     return SOStream.CharCount;
 }
 
-/* internal do-anything v[s][n]scanf() formatting system with input
-    from strings or FILE * */
 int StdioBaseScanf(
     struct ParseState* Parser, FILE* Stream, char* StrIn, char* Format, struct StdVararg* Args)
 {
@@ -608,7 +578,6 @@ int StdioBaseScanf(
     }
 }
 
-/* stdio calls */
 void StdioFopen(
     struct ParseState* Parser, struct Value* ReturnValue, struct Value** Param, int NumArgs)
 {
@@ -940,13 +909,11 @@ void StdioVsscanf(
         Parser, NULL, Param[0]->Val->Pointer, Param[1]->Val->Pointer, Param[2]->Val->Pointer);
 }
 
-/* handy structure definitions */
 const char StdioDefs[] = "\
 typedef struct __va_listStruct va_list; \
 typedef struct __FILEStruct FILE;\
 ";
 
-/* all stdio functions */
 struct LibraryFunction StdioFunctions[] = {
     {StdioFopen,     "FILE *fopen(char *, char *);"                },
     {StdioFreopen,   "FILE *freopen(char *, char *, FILE *);"      },
@@ -998,25 +965,18 @@ struct LibraryFunction StdioFunctions[] = {
     {NULL,           NULL                                          }
 };
 
-/* creates various system-dependent definitions */
 void StdioSetupFunc(Picoc* pc)
 {
     struct ValueType* StructFileType;
     struct ValueType* FilePtrType;
 
-    /* make a "struct __FILEStruct" which is the same size as a
-        native FILE structure */
     StructFileType =
         TypeCreateOpaqueStruct(pc, NULL, TableStrRegister(pc, "__FILEStruct"), sizeof(FILE));
 
-    /* get a FILE * type */
     FilePtrType = TypeGetMatching(pc, NULL, StructFileType, TypePointer, 0, pc->StrEmpty, true);
 
-    /* make a "struct __va_listStruct" which is the same size as
-        our struct StdVararg */
     TypeCreateOpaqueStruct(pc, NULL, TableStrRegister(pc, "__va_listStruct"), sizeof(FILE));
 
-    /* define EOF equal to the system EOF */
     VariableDefinePlatformVar(pc, NULL, "EOF", &pc->IntType, (union AnyValue*)&EOFValue, false);
     VariableDefinePlatformVar(
         pc, NULL, "SEEK_SET", &pc->IntType, (union AnyValue*)&SEEK_SETValue, false);
@@ -1039,14 +999,12 @@ void StdioSetupFunc(Picoc* pc)
     VariableDefinePlatformVar(
         pc, NULL, "GETS_MAX", &pc->IntType, (union AnyValue*)&GETS_MAXValue, false);
 
-    /* define stdin, stdout and stderr */
     VariableDefinePlatformVar(pc, NULL, "stdin", FilePtrType, (union AnyValue*)&stdinValue, false);
     VariableDefinePlatformVar(
         pc, NULL, "stdout", FilePtrType, (union AnyValue*)&stdoutValue, false);
     VariableDefinePlatformVar(
         pc, NULL, "stderr", FilePtrType, (union AnyValue*)&stderrValue, false);
 
-    /* define NULL, true and false */
     if (!VariableDefined(pc, TableStrRegister(pc, "NULL")))
     {
         VariableDefinePlatformVar(
@@ -1054,7 +1012,6 @@ void StdioSetupFunc(Picoc* pc)
     }
 }
 
-/* portability-related I/O calls */
 void PrintCh(char OutCh, FILE* Stream)
 {
     putc(OutCh, Stream);

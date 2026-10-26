@@ -43,12 +43,9 @@ public:
     void operator=(KeyboardManager const&)  = delete;
 
     std::u16string keyboard(const std::string& suggestion);
-    // Free-form text prompt with a custom hint and length cap; returns the raw
-    // input (no forbidden-character filtering), empty on cancel.
+
     std::string text(const std::string& suggestion, const std::string& hint, size_t maxLen);
-    // On-screen numeric keypad that only accepts values in [min, max] (a filter
-    // callback keeps the keyboard open on out-of-range input). Returns the entered
-    // value, or -1 on cancel.
+
     int numpad(const std::string& hint, int min, int max);
 
     static const size_t CUSTOM_PATH_LEN = 20;

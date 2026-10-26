@@ -36,7 +36,7 @@
 #include <algorithm>
 
 namespace {
-    // A small folder glyph drawn from primitives (no gfx asset): a tab + body.
+
     void drawFolderMark(int x, int y, int side, u32 color)
     {
         const int h = side - 4;
@@ -53,8 +53,7 @@ FolderBrowserOverlay::FolderBrowserOverlay(Screen& screen, const std::string& pr
 
 std::u16string FolderBrowserOverlay::currentPath(void) const
 {
-    // mCurrent is archive-relative ("/" == SD root); config paths carry the
-    // "sdmc:" prefix, matching what the old keyboard prompt produced.
+
     return u"sdmc:" + mCurrent;
 }
 
@@ -80,7 +79,7 @@ int FolderBrowserOverlay::rowCount(void) const
 
 void FolderBrowserOverlay::drawHeaderExtra(void) const
 {
-    // The current path on its own line under the prompt.
+
     TextPool& text   = TextPool::get();
     std::string path = StringUtils::UTF16toUTF8(currentPath());
     text.draw(text.truncate(path, 328, 0.42f), 36, 40, 0.42f, COLOR_TEAL, OVERLAY_Z);
@@ -125,8 +124,8 @@ void FolderBrowserOverlay::update(const InputState& input)
 
     if (kDown & KEY_X) {
         std::u16string path = currentPath();
-        auto pick           = mOnPick; // copy to the stack: removeOverlay() destroys *this
-        screen.removeOverlay();        // dismiss before running the callback
+        auto pick           = mOnPick;
+        screen.removeOverlay();
         pick(path);
         return;
     }

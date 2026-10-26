@@ -29,8 +29,7 @@
 #include <algorithm>
 
 namespace {
-    // Keep the first `maxLines` lines of an already-wrapped block, marking the
-    // cut with an ellipsis so a clipped message doesn't read as a complete one.
+
     std::string keepLines(const std::string& wrapped, int maxLines)
     {
         size_t pos = 0;
@@ -55,7 +54,7 @@ ModalChrome::Layout ModalChrome::fitText(std::string& text, float textSize, bool
     int textH         = (int)StringUtils::textHeight(text, textSize);
 
     if (chromeH + textH > CARD_MAX_H) {
-        // One line short of the ellipsis' own line, so the "..." fits too.
+
         const int fits = std::max(1, (int)((CARD_MAX_H - chromeH) / lineH) - 1);
         text           = keepLines(text, fits);
         textH          = (int)StringUtils::textHeight(text, textSize);
@@ -67,9 +66,6 @@ ModalChrome::Layout ModalChrome::fitText(std::string& text, float textSize, bool
     l.headerY = l.cardY + 8;
     l.btnY    = l.cardY + l.cardH - PAD - BTN_H;
 
-    // Center the block in whatever band is left between header and buttons; on
-    // a min-height card that band is taller than the text, on a grown one it
-    // matches it exactly.
     const int bandTop = l.cardY + PAD + headerH;
     const int bandH   = l.btnY - TEXT_GAP - bandTop;
     l.textY           = bandTop + std::max(0, (bandH - textH) / 2);

@@ -1,4 +1,3 @@
-/*  */
 #include <time.h>
 
 #include "interpreter.h"
@@ -84,20 +83,13 @@ void StdGmtime_r(
     ReturnValue->Val->Pointer = (void*)gmtime_r(Param[0]->Val->Pointer, Param[1]->Val->Pointer);
 }
 
-// void StdTimegm(struct ParseState* Parser, struct Value* ReturnValue, struct Value** Param, int
-// NumArgs)
-// {
-//     ReturnValue->Val->Integer = timegm(Param[0]->Val->Pointer);
-// }
 #endif
 
-/* handy structure definitions */
 const char StdTimeDefs[] = "\
 typedef int time_t; \
 typedef int clock_t;\
 ";
 
-/* all string.h functions */
 struct LibraryFunction StdTimeFunctions[] = {
     {StdAsctime,   "char *asctime(struct tm *);"                    },
     {StdClock,     "time_t clock();"                                },
@@ -111,18 +103,16 @@ struct LibraryFunction StdTimeFunctions[] = {
 #ifndef WIN32
     {StdStrptime,  "char *strptime(char *, char *, struct tm *);"   },
     {StdGmtime_r,  "struct tm *gmtime_r(int *, struct tm *);"       },
-// {StdTimegm, "int timegm(struct tm *);"},
+
 #endif
     {NULL,         NULL                                             }
 };
 
-/* creates various system-dependent definitions */
 void StdTimeSetupFunc(Picoc* pc)
 {
-    /* make a "struct tm" which is the same size as a native tm structure */
+
     TypeCreateOpaqueStruct(pc, NULL, TableStrRegister(pc, "tm"), sizeof(struct tm));
 
-    /* define CLK_PER_SEC etc. */
     VariableDefinePlatformVar(
         pc, NULL, "CLOCKS_PER_SEC", &pc->IntType, (union AnyValue*)&CLOCKS_PER_SECValue, false);
 #ifdef CLK_PER_SEC

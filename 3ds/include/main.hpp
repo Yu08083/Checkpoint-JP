@@ -38,16 +38,11 @@
 #include <vector>
 
 inline std::shared_ptr<Screen> g_screen = nullptr;
-// A screen may request replacing g_screen with another (e.g. Main -> Settings).
-// The swap is deferred to the main loop and applied only after the current
-// screen's update() returns, so a screen never destroys itself mid-update.
+
 inline std::shared_ptr<Screen> g_pendingScreen = nullptr;
 inline bool g_bottomScrollEnabled              = false;
 inline float g_timer                           = 0;
-// Set by the Settings page when a change affects the main title grid or its
-// detail (cart scan, NAND saves, favorites, filters, extra folders). The main
-// screen consumes it on its next update and reloads titles once, so edits show
-// up without the user manually refreshing.
+
 inline bool g_titlesDirty = false;
 
 #endif

@@ -32,19 +32,15 @@
 #include <vector>
 
 namespace {
-    // Built by the root Makefile from switch/romfs/fonts/SpaceMono-Regular.ttf.
+
     constexpr const char* MONO_FONT_PATH = "romfs:/fonts/SpaceMono.bcfnt";
 
-    // Glyph capacity of the persistent buffer. When a parse would not fit, the
-    // whole cache is rebuilt (C2D_TextBuf cannot free individual entries).
     constexpr size_t GLYPH_CAPACITY = 8192;
-    // frameTick rebuilds when distinct cached strings exceed this, so scrolling
-    // through long backup/title lists cannot grow the map without bound.
+
     constexpr size_t MAX_ENTRIES = 512;
-    // How often frameTick checks the entry bound.
+
     constexpr u32 TICK_INTERVAL = 300;
 
-    // Byte length of the UTF-8 sequence starting with lead byte `b`.
     size_t utf8SeqLen(unsigned char b)
     {
         if ((b & 0x80) == 0x00) {
@@ -81,7 +77,7 @@ TextPool::~TextPool(void)
 
 void TextPool::rebuild(void)
 {
-    C2D_TextBufClear(mBuf); // invalidates every cached C2D_Text with it
+    C2D_TextBufClear(mBuf);
     mCache.clear();
     mMonoCache.clear();
 }
@@ -100,8 +96,7 @@ const C2D_Text* TextPool::obtain(const std::string& s, C2D_Font font)
     if (it != cache.end()) {
         return &it->second;
     }
-    // s.size() over-estimates the glyph count for multi-byte UTF-8, which only
-    // makes the rebuild trigger early — never a truncated parse.
+
     if (C2D_TextBufGetNumGlyphs(mBuf) + s.size() > GLYPH_CAPACITY) {
         rebuild();
     }
@@ -120,25 +115,17 @@ bool TextPool::monoReady(void)
             Logging::error("Failed to load {}; the script log pane falls back to the system font.", MONO_FONT_PATH);
         }
         else {
-            // Every glyph in a monospace face advances the same, so one measure
-            // is the whole metric: the log pane multiplies it by a column count
-            // instead of measuring each line.
+
             const C2D_Text* probe = obtain("0", mMono);
             C2D_TextGetDimensions(probe, 1.0f, 1.0f, &mMonoAdvance, &mMonoHeight);
 
-            // citro2d hands out sizes in system-font units: it stretches every
-            // face to the shared font's line height, so a 7pt atlas would be
-            // drawn at ~30px rows — same size as the system font, only blurry
-            // and four times as coarse. Recover the atlas's own line height and
-            // work in that instead, so scale 1.0 is one texel per pixel.
             const FINF_s* finf = C2D_FontGetInfo(mMono);
             if (finf != nullptr && finf->lineFeed > 0 && mMonoHeight > 0.0f) {
                 mMonoScale = (float)finf->lineFeed / mMonoHeight;
                 mMonoAdvance *= mMonoScale;
                 mMonoHeight = (float)finf->lineFeed;
             }
-            // Unfiltered: at 1:1 the sampler should hit texel centres exactly,
-            // and nearest keeps the stems hard if a caller ever nudges the pen.
+
             C2D_FontSetFilter(mMono, GPU_NEAREST, GPU_NEAREST);
         }
     }
@@ -169,16 +156,14 @@ void TextPool::drawMono(const std::string& s, float x, float y, float scale, u32
 float TextPool::draw(const std::string& s, float x, float y, float scale, u32 color, float depth)
 {
     const C2D_Text* t = obtain(s, nullptr);
-    // Snap the pen to whole pixels: the system font is a bitmap atlas, so
-    // fractional origins smear glyph edges across two texels and read as blurry.
+
     C2D_DrawText(t, C2D_WithColor, floorf(x + 0.5f), floorf(y + 0.5f), depth, scale, scale, color);
     return StringUtils::textWidth(*t, scale);
 }
 
 void TextPool::drawCentered(const std::string& s, float x, float w, float y, float scale, u32 color, float depth)
 {
-    // truncate() returns `s` unchanged when it already fits, so the common
-    // case costs one cached width measure.
+
     const C2D_Text* t = obtain(truncate(s, w, scale), nullptr);
     const float cx    = x + (w - StringUtils::textWidth(*t, scale)) / 2;
     C2D_DrawText(t, C2D_WithColor, floorf(cx + 0.5f), floorf(y + 0.5f), depth, scale, scale, color);
@@ -211,13 +196,11 @@ std::string TextPool::truncate(const std::string& s, float maxWidth, float scale
     }
     const float ellipsisWidth = StringUtils::textWidth("...", scale);
 
-    // Codepoint start offsets, so the cut never splits a UTF-8 sequence.
     std::vector<size_t> starts;
     for (size_t i = 0; i < s.size(); i += utf8SeqLen((unsigned char)s[i])) {
         starts.push_back(i);
     }
 
-    // Largest codepoint count whose prefix still fits alongside the ellipsis.
     size_t lo = 0, hi = starts.size();
     while (lo < hi) {
         const size_t mid = (lo + hi + 1) / 2;

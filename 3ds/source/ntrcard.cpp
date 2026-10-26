@@ -37,33 +37,21 @@ namespace {
     constexpr std::uint8_t mainReadCommand       = 0xB7;
     constexpr std::uint8_t nandRomModeCommand    = 0x8B;
     constexpr std::uint8_t nandRwModeCommand     = 0xB2;
-    // The write half of the NAND protocol, named here so the read paths' "no
-    // command outside {B2, B7, 8B}" claim can be checked against one list.
+
     constexpr std::uint8_t nandWriteEnableCommand   = 0x85;
     constexpr std::uint8_t nandWriteBufferCommand   = 0x81;
     constexpr std::uint8_t nandCommitBufferCommand  = 0x82;
     constexpr std::uint8_t nandDiscardBufferCommand = 0x84;
     constexpr std::uint8_t nandReadStatusCommand    = 0xD6;
-    // The cartridge reports its programming cycle finished in bit 5 of the
-    // status word 0xD6 returns.
+
     constexpr std::uint32_t nandStatusReady = 1u << 5;
     constexpr std::uint32_t mainDataMinimum = 0x8000;
-    // The largest block ROMCTRL can describe is 0x100 << 6 words of 4 bytes;
-    // one extra guards against a field this module did not write.
+
     constexpr std::size_t maxDrainWords = (0x100u << 6) / sizeof(std::uint32_t);
 
-    // Leaving the cartridge selected in NAND RW mode is the worst outcome this
-    // module can produce: Process9's next ordinary ROM read then returns save
-    // data. So getting back to ROM mode is given its own budget, much larger
-    // than one command's, and more than one try. Run 13 lost a cartridge to a
-    // 100 ms wait while Process9 was re-initialising the card -- ROMCNT at
-    // gap1 0x1FFF and gap2 0x3F, which is the DS card init timing, so a
-    // sequence of transfers rather than one.
     constexpr std::uint64_t cleanupTimeoutMultiplier = 20;
     constexpr unsigned cleanupAttempts               = 4;
 
-    // ROMCTRL block size field for a transfer of `sectors` sectors: the field
-    // holds n and the hardware moves 0x100 << n bytes, so one sector is n = 1.
     constexpr std::uint32_t blockSizeField(std::size_t sectors)
     {
         std::uint32_t field = 1;
@@ -88,23 +76,15 @@ namespace {
         bool commandIdentityChanged       = false;
         std::uint32_t expectedCommandHigh = 0;
         std::uint32_t expectedCommandLow  = 0;
-        // Captured only when a guard trips, so a lost arbitration is
-        // distinguishable from a cartridge that stopped answering.
+
         std::uint16_t observedMCardControl = 0;
         std::uint32_t observedRomControl   = 0;
         std::uint32_t observedCommandHigh  = 0;
         std::uint32_t observedCommandLow   = 0;
-        // Words read out of the FIFO after the transfer was abandoned, purely
-        // so BUSY could clear.
+
         std::size_t drainedWords = 0;
     };
 
-    // Read out whatever is left of a transfer this module started, so BUSY can
-    // clear and the next owner finds an idle controller. NTRCARD keeps BUSY set
-    // until the whole block has been read from the FIFO, and the only other
-    // party that ever drains it is Process9's card interrupt handler, so an
-    // abandoned block left here stays forever. nRESET is masked out of the
-    // ownership comparison: a host reset does not change whose block this is.
     std::size_t drainAbandonedTransfer(NtrCard::CardBus& bus, std::uint32_t transferControl, std::uint64_t timeoutTicks)
     {
         constexpr std::uint32_t ownership = ~(romVolatileStatus | romNoReset);
@@ -115,9 +95,7 @@ namespace {
             if ((control & romStart) == 0) {
                 break;
             }
-            // A different configuration means a different owner's block. Its
-            // words are theirs to read; taking them would turn our stall into
-            // their short read.
+
             if ((control & ownership) != (transferControl & ownership)) {
                 break;
             }
@@ -196,8 +174,6 @@ namespace {
         {
         }
 
-        // Records what this module wrote to MCNT, so the destructor can tell
-        // "the mask is still ours to lift" from "someone else owns MCNT now".
         void noteMCardControlWritten(std::uint16_t written)
         {
             mWrittenMCardControl = written;
@@ -207,30 +183,17 @@ namespace {
         ~ControllerStateRestorer()
         {
             if (mRestoreRegisters) {
-                // Leave transfer IRQ masked until command and ROM configuration
-                // are back, so Process9 does not see our completion.
+
                 mBus.write32(NtrCard::RegisterOffset::RomControl, mRomControl);
                 mBus.write32(NtrCard::RegisterOffset::CommandHigh, mCommandHigh);
                 mBus.write32(NtrCard::RegisterOffset::CommandLow, mCommandLow);
             }
 
-            // MCNT is put back even when the rest of the snapshot is abandoned.
-            // What abandon() protects against is writing stale ROM configuration
-            // over newer host state, and a masked transfer interrupt is not
-            // state of that kind: it is an interrupt this module switched off,
-            // and leaving it off stops Process9 completing any transfer it
-            // starts. That is unrecoverable without a console power cycle, so it
-            // must never survive this scope. The one case to skip is MCNT no
-            // longer holding the value we wrote, because then the register
-            // belongs to somebody else and ours is the stale value.
             if (mMCardControlWritten && mBus.read16(NtrCard::RegisterOffset::MCardControl) == mWrittenMCardControl) {
                 mBus.write16(NtrCard::RegisterOffset::MCardControl, mMCardControl);
             }
         }
 
-        // Once the host resets the card interface, the ROM configuration and
-        // command snapshot taken before our transfer are stale. Writing them
-        // back would undo part of Process9's reset and race newer host state.
         void abandon(void) { mRestoreRegisters = false; }
 
     private:
@@ -244,18 +207,6 @@ namespace {
         bool mRestoreRegisters             = true;
     };
 
-    // What the controller has to be for a burst to start: enabled, idle, and out
-    // of reset. Deliberately not "configured the way the cartridge header says".
-    //
-    // Process9 drives this controller with its own timing -- run 12 found it
-    // parked at gap1 0x100 with KEY2 command encryption off, against the
-    // header's 0x657 and encryption on, and again at 0x20180000 after a slot
-    // power cycle. None of that describes the cartridge; it describes the last
-    // transfer Process9 ran. Every command this module issues writes the whole
-    // configuration it needs from the header value anyway, so the idle value it
-    // finds is an observation, not a precondition. Demanding the header's value
-    // cost run 12 sixteen retries against a controller that was perfectly
-    // usable, and ended the dump.
     NtrCard::SectorReadStatus preflightController(
         NtrCard::CardBus& bus, std::uint32_t normalRomControl, std::uint16_t& mCardControl, std::uint32_t& romControl, bool& idleConfigDiffers)
     {
@@ -296,8 +247,6 @@ namespace {
                (static_cast<std::uint32_t>(command[offset + 2]) << 16) | (static_cast<std::uint32_t>(command[offset + 3]) << 24);
     }
 
-    // Everything the B2/B7…B7/8B sequence reports, whether it covered one
-    // sector (Gate 3) or a whole window (Gate 4).
     struct NandRangeResult {
         NtrCard::SectorReadStatus status            = NtrCard::SectorReadStatus::InvalidArgument;
         NtrCard::NandReadStage stage                = NtrCard::NandReadStage::Preflight;
@@ -346,11 +295,6 @@ namespace {
 
         bus.writeCommand(commandBytes);
 
-        // Command and ROMCTRL are separate registers with no ARM11-visible
-        // ownership primitive between them. The command port is byte-wide in
-        // libnds and 32-bit ARM11 reads returned zero on hardware, so mirror
-        // the byte writes here. An all-zero readback means this mapping cannot
-        // observe command identity; payload sentinels then provide the guard.
         const auto commandReadback = bus.readCommand();
         result.observedCommandHigh = packedCommandWord(commandReadback, 0);
         result.observedCommandLow  = packedCommandWord(commandReadback, 4);
@@ -374,8 +318,7 @@ namespace {
         for (;;) {
             const std::uint16_t mCardControl = bus.read16(NtrCard::RegisterOffset::MCardControl);
             if (mCardControl != expectedMCardControl) {
-                // Process9 services card IO for the rest of the system; this is
-                // what losing the controller mid-transfer looks like.
+
                 result.observedMCardControl = mCardControl;
                 result.observedRomControl   = bus.read32(NtrCard::RegisterOffset::RomControl);
                 result.status               = NtrCard::SectorReadStatus::ControllerStateChanged;
@@ -388,21 +331,13 @@ namespace {
             if ((control & ~romVolatileStatus) != (result.transferControl & ~romVolatileStatus)) {
                 result.observedMCardControl = mCardControl;
                 result.observedRomControl   = control;
-                // nRESET is set for the whole transfer, so losing it means the
-                // host reset the card interface rather than merely writing the
-                // register.
+
                 result.status =
                     (control & romNoReset) == 0 ? NtrCard::SectorReadStatus::ControllerReset : NtrCard::SectorReadStatus::ControllerStateChanged;
                 result.drainedWords = drainAbandonedTransfer(bus, result.transferControl, timeoutTicks);
                 return result;
             }
 
-            // MCNT and ROMCNT are not a unique owner identity. Process9's own
-            // B7 can use both exact values while its command carries another
-            // address. Sample command identity before the first FIFO word,
-            // every sixteen words thereafter, and once more at completion.
-            // The caller discards the whole failed burst, so detecting after a
-            // few words still prevents foreign bytes reaching accepted data.
             if (result.commandReadbackAvailable && ((control & romStart) == 0 || ((control & romDataReady) != 0 && (result.wordsRead % 16) == 0))) {
                 const auto currentCommand       = bus.readCommand();
                 const std::uint32_t commandHigh = packedCommandWord(currentCommand, 0);
@@ -414,9 +349,7 @@ namespace {
                     result.observedCommandLow     = commandLow;
                     result.commandIdentityChanged = true;
                     result.status                 = NtrCard::SectorReadStatus::ControllerStateChanged;
-                    // ROMCNT alone no longer proves whose FIFO this is. Leave
-                    // it to Process9's enabled transfer IRQ instead of stealing
-                    // words from a transfer whose command is known to be foreign.
+
                     return result;
                 }
             }
@@ -436,9 +369,7 @@ namespace {
                 result.observedMCardControl = mCardControl;
                 result.observedRomControl   = control;
                 result.status               = NtrCard::SectorReadStatus::Timeout;
-                // A cartridge that stopped answering gets no further command,
-                // but any words it did hand over still have to leave the FIFO
-                // or BUSY never clears for the next owner.
+
                 result.drainedWords = drainAbandonedTransfer(bus, result.transferControl, timeoutTicks);
                 return result;
             }
@@ -448,11 +379,6 @@ namespace {
         return result;
     }
 
-    // A write transfer's FIFO wants words, not readers, so an abandoned one
-    // cannot be cleared the way drainAbandonedTransfer clears a read. Feed it
-    // zeros until the controller lets go. Those zeros reach the cartridge's
-    // volatile page buffer and never NAND, because every path that calls this
-    // discards the buffer with 0x84 instead of committing it.
     std::size_t flushAbandonedWrite(NtrCard::CardBus& bus, std::uint32_t transferControl, std::uint64_t timeoutTicks)
     {
         constexpr std::uint32_t ownership = ~(romVolatileStatus | romNoReset);
@@ -477,12 +403,6 @@ namespace {
         return flushed;
     }
 
-    // runPolledCommand's twin for a transfer that moves words to the cartridge.
-    // Every guard is the same and in the same order -- idle check, command
-    // identity before the first word and every sixteen after, MCNT and ROMCNT
-    // ownership each iteration, bounded timeout -- because a foreign transfer
-    // that steals a write is worse than one that steals a read: the bytes it
-    // takes are ours and the buffer it fills is the cartridge's.
     CommandResult runPolledWriteCommand(NtrCard::CardBus& bus, std::uint8_t command, std::uint32_t parameter, std::uint32_t normalRomControl,
         std::uint32_t blockSize, std::uint16_t expectedMCardControl, const std::uint32_t* input, std::size_t inputWords, std::uint64_t timeoutTicks)
     {
@@ -514,9 +434,6 @@ namespace {
             return result;
         }
 
-        // romWrite is the one bit that separates this from a read transfer, and
-        // it is in romTransferFixedBits so the caller's idle ROMCNT can never
-        // smuggle it in or out.
         result.transferControl = (normalRomControl & ~romTransferFixedBits) | romNoReset | romWrite | blockSize | romStart;
         bus.write32(NtrCard::RegisterOffset::RomControl, result.transferControl);
         result.transferStarted = true;
@@ -559,9 +476,7 @@ namespace {
             }
 
             if ((control & romDataReady) != 0) {
-                // Past the caller's buffer means the controller asked for more
-                // than one page. Feed zeros rather than reading off the end;
-                // the count mismatch below fails the write either way.
+
                 const std::uint32_t word = result.wordsRead < inputWords ? input[result.wordsRead] : 0;
                 bus.write32(NtrCard::RegisterOffset::Fifo, word);
                 result.wordsRead++;
@@ -583,11 +498,6 @@ namespace {
         return result;
     }
 
-    // One bounded NAND read: select the 128-KiB RW window `windowIndex` with
-    // B2, read `sectorCount` consecutive sectors starting at `firstSector` with
-    // B7, then return the cartridge to ROM mode with 8B. Command, ROMCTRL, and
-    // MCNT are restored on every path after the first write. No command outside
-    // {B2, B7, 8B} is emitted, so no cartridge write can result.
     NandRangeResult readNandRange(NtrCard::CardBus& bus, std::uint32_t rwStart, std::uint32_t windowIndex, std::uint32_t firstSector,
         std::size_t sectorCount, std::size_t blockSectors, std::uint32_t normalRomControl, std::uint64_t timeoutTicks, std::uint32_t* output)
     {
@@ -601,8 +511,7 @@ namespace {
             windowIndex > (0xFFFFFFFFu - rwStart) / NtrCard::nandWindowSize) {
             return result;
         }
-        // A multi-sector B7 is one transfer at one address, so the run has to
-        // start on a block boundary and end on one.
+
         if (!validBlockSectors(blockSectors) || (firstSector % blockSectors) != 0 || (sectorCount % blockSectors) != 0) {
             return result;
         }
@@ -612,8 +521,7 @@ namespace {
 
         result.status = preflightController(bus, normalRomControl, result.initialMCardControl, result.initialRomControl, result.idleConfigDiffers);
         if (result.status != SectorReadStatus::Ok) {
-            // Nothing was written and no command issued, so the cartridge is
-            // untouched. Report what the controller actually looked like.
+
             result.observedMCardControl = result.initialMCardControl;
             result.observedRomControl   = result.initialRomControl;
             if (result.status == SectorReadStatus::ControllerReset) {
@@ -627,21 +535,10 @@ namespace {
         const std::uint32_t initialCommandLow  = bus.read32(RegisterOffset::CommandLow);
         ControllerStateRestorer restore(bus, result.initialMCardControl, result.initialRomControl, initialCommandHigh, initialCommandLow);
 
-        // Process9's completion interrupt is left alone. Ownership is watched
-        // through MCNT, and a theft that starts a transfer is caught by the
-        // ROMCNT guard instead.
         std::uint16_t polledMCardControl = result.initialMCardControl;
         const auto returnToRom           = [&]() {
             result.returnToRomAttempted = true;
 
-            // 8B is cleanup, not a read. It matters more that the cartridge
-            // leaves NAND RW mode than that MCNT still holds the value this
-            // burst started with, because a cartridge left selected makes
-            // Process9's next ordinary ROM read return save data. So adopt
-            // whatever MCNT holds now, provided the controller is enabled and
-            // idle: run 11 refused the 8B purely because Process9 had cleared
-            // its own transfer interrupt, MCNT 0xC000 to 0x8000, on a
-            // controller that was otherwise idle and ours to use.
             const std::uint16_t currentMCardControl = bus.read16(RegisterOffset::MCardControl);
             const std::uint32_t currentRomControl   = bus.read32(RegisterOffset::RomControl);
             if ((currentMCardControl & mCardEnable) == 0 || (currentRomControl & romStart) != 0) {
@@ -669,18 +566,9 @@ namespace {
             }
         };
 
-        // Getting the cartridge out of NAND RW mode matters more than the read
-        // that failed: while it stays selected, Process9's next ordinary ROM
-        // read returns save data instead. So every failure after B2 tries to
-        // reach ROM mode, but only from a controller that is idle and still
-        // ours -- issuing 8B on top of a running transfer would be worse than
-        // the state it repairs.
         const auto recoverToRomMode = [&](SectorReadStatus status) {
             if (status == SectorReadStatus::ControllerReset) {
-                // The cartridge was reset along with the interface, so it is
-                // already in ROM mode and any window selection is gone. The
-                // pre-transfer controller snapshot is stale now; leave the reset
-                // state untouched and report the reset so the caller can stop.
+
                 result.cartridgeWasReset  = true;
                 result.recoveredToRomMode = true;
                 restore.abandon();
@@ -693,16 +581,10 @@ namespace {
                 return;
             }
             if (status != SectorReadStatus::ControllerStateChanged) {
-                // A timeout means the cartridge itself never answered. Another
-                // command cannot be assumed to fare better, and BUSY may still
-                // be set with nothing driving it.
+
                 return;
             }
 
-            // Wait for whoever took the controller to finish, then take it back
-            // for one 8B, and keep trying within the cleanup budget: the party
-            // being waited for may be running a whole re-initialisation
-            // sequence, and one lost race must not cost the cartridge's mode.
             const std::uint64_t cleanupTimeout = timeoutTicks * cleanupTimeoutMultiplier;
             const std::uint64_t started        = bus.ticks();
             for (unsigned attempt = 0; attempt < cleanupAttempts; attempt++) {
@@ -711,9 +593,7 @@ namespace {
                     const std::uint16_t mCardControl = bus.read16(RegisterOffset::MCardControl);
                     const std::uint32_t romControl   = bus.read32(RegisterOffset::RomControl);
                     if ((romControl & romNoReset) == 0) {
-                        // The host reset the interface while we waited. The
-                        // cartridge went back to ROM mode with it, so there is
-                        // nothing left to undo and nothing to warn about.
+
                         result.cartridgeWasReset  = true;
                         result.recoveredToRomMode = true;
                         restore.abandon();
@@ -728,9 +608,6 @@ namespace {
                     return;
                 }
 
-                // Nothing to re-assert: this module never changed MCNT, so
-                // writing the register would announce a change of ownership for
-                // no reason.
                 returnToRom();
                 if (result.recoveredToRomMode) {
                     return;
@@ -754,9 +631,7 @@ namespace {
             result.commandIdentityChanged = selected.commandIdentityChanged;
             result.expectedCommandHigh    = selected.expectedCommandHigh;
             result.expectedCommandLow     = selected.expectedCommandLow;
-            // B2 never reached ROMCTRL, so the cartridge was never selected.
-            // A foreign command replaced ours in the command register; do not
-            // issue 8B or restore stale controller state over its owner.
+
             if (selected.status == SectorReadStatus::ControllerStateChanged && !selected.transferStarted) {
                 result.stage = NandReadStage::Preflight;
                 restore.abandon();
@@ -811,17 +686,6 @@ namespace {
         return result;
     }
 
-    // Program one 0x800-byte page. Structured exactly like readNandRange -- same
-    // preflight, same restorer, same optional MCNT mask, same "get back to ROM
-    // mode on every path" discipline -- because the failure that matters is the
-    // same one: a cartridge left selected in NAND RW mode makes Process9's next
-    // ordinary ROM read return save data.
-    //
-    // The one asymmetry is CommitBuffer. Before 0x82 the cartridge is only
-    // holding our bytes in a volatile buffer that 0x84 empties, so any failure
-    // is free. After 0x82 the page is being programmed and no cleanup here can
-    // put back what was there. That is why the commit is the last thing this
-    // function decides to do and why everything before it is checked.
     NtrCard::NandPageWriteResult writeNandPage(NtrCard::CardBus& bus, std::uint32_t rwStart, std::uint32_t pageOffset, std::uint32_t normalRomControl,
         std::uint64_t timeoutTicks, const std::uint32_t* page, std::size_t pageWords)
     {
@@ -836,8 +700,6 @@ namespace {
             return result;
         }
 
-        // The window this page lives in, and the page's offset inside it. B2
-        // selects the window; the 0x81 command carries the absolute offset.
         const std::uint32_t windowBase = rwStart + ((pageOffset - rwStart) / NtrCard::nandWindowSize) * (std::uint32_t)NtrCard::nandWindowSize;
 
         bool idleConfigDiffers = false;
@@ -855,10 +717,7 @@ namespace {
         ControllerStateRestorer restore(bus, result.initialMCardControl, result.initialRomControl, initialCommandHigh, initialCommandLow);
 
         std::uint16_t polledMCardControl = result.initialMCardControl;
-        // Cleanup, in the order the cartridge needs it: empty the page buffer,
-        // then leave RW mode. Both are attempted only from an idle controller
-        // that is still ours; issuing either on top of a running transfer would
-        // be worse than the state it repairs.
+
         const auto controllerIdleAndOurs = [&]() {
             const std::uint16_t mCardControl = bus.read16(RegisterOffset::MCardControl);
             const std::uint32_t romControl   = bus.read32(RegisterOffset::RomControl);
@@ -898,8 +757,6 @@ namespace {
             }
         };
 
-        // Every failure after B2 runs this. A reset already put the cartridge
-        // back in ROM mode, so it needs nothing.
         const auto cleanup = [&](SectorReadStatus status) {
             if (status == SectorReadStatus::ControllerReset) {
                 result.cartridgeWasReset  = true;
@@ -928,8 +785,7 @@ namespace {
             runPolledCommand(bus, nandRwModeCommand, windowBase, normalRomControl, 0, polledMCardControl, nullptr, 0, timeoutTicks);
         result.commandReadbackAvailable = selected.commandReadbackAvailable;
         if (selected.status != SectorReadStatus::Ok) {
-            // B2 never took, so the cartridge was never selected and there is no
-            // buffer to discard and no mode to leave.
+
             result.stage                  = NandWriteStage::SelectWindow;
             result.status                 = selected.status;
             result.commandIdentityChanged = selected.commandIdentityChanged;
@@ -947,9 +803,6 @@ namespace {
             return fail(NandWriteStage::WriteEnable, enabled);
         }
 
-        // Four sector-sized transfers fill the page buffer. The command carries
-        // the same absolute offset every time: the cartridge advances its own
-        // buffer pointer, exactly as GodMode9i's cardWriteNand does.
         result.stage = NandWriteStage::WriteBuffer;
         for (std::size_t chunk = 0; chunk < NtrCard::nandPageSectors; chunk++) {
             const CommandResult written = runPolledWriteCommand(bus, nandWriteBufferCommand, pageOffset, normalRomControl, blockSizeField(1),
@@ -961,14 +814,8 @@ namespace {
             }
         }
 
-        // The point of no return. Everything above is discardable; from here the
-        // cartridge is programming NAND.
         result.stage = NandWriteStage::CommitBuffer;
-        // Set before the command, not after. Once 0x82 is on the wire the
-        // cartridge may have begun programming, and whether this module got to
-        // watch it finish changes nothing about the page. Reporting `committed`
-        // only on success would tell the caller its data is intact in exactly
-        // the case where that is least certain.
+
         result.committed = true;
         const CommandResult committed =
             runPolledCommand(bus, nandCommitBufferCommand, 0, normalRomControl, 0, polledMCardControl, nullptr, 0, timeoutTicks);
@@ -976,10 +823,6 @@ namespace {
             return fail(NandWriteStage::CommitBuffer, committed);
         }
 
-        // Wait for the programming cycle. Unlike GodMode9i's unbounded loop this
-        // gives up: a cartridge that never reports ready is a cartridge that
-        // will not report ready, and spinning forever on the app core with the
-        // cartridge mid-program is the worst place to hang.
         result.stage                     = NandWriteStage::AwaitReady;
         const std::uint64_t readyStarted = bus.ticks();
         const std::uint64_t readyTimeout = timeoutTicks * cleanupTimeoutMultiplier;
@@ -1022,8 +865,7 @@ namespace {
 
 NtrCard::RegisterSnapshot NtrCard::capture(const RegisterReader& reader)
 {
-    // Do not add Fifo here. Reading it acknowledges/consumes a ready word and
-    // can disturb a transfer Process9 owns. Every register below is passive.
+
     return {
         .mCardControl = reader.read16(RegisterOffset::MCardControl),
         .romControl   = reader.read32(RegisterOffset::RomControl),
@@ -1117,17 +959,11 @@ NtrCard::StalledControllerRecovery NtrCard::recoverStalledController(CardBus& bu
     recovery.mCardControlAfter  = recovery.mCardControlBefore;
     recovery.romControlAfter    = recovery.romControlBefore;
     if ((recovery.romControlBefore & romStart) == 0 || timeoutTicks == 0) {
-        // Nothing is stuck. Draining an idle controller would only consume a
-        // word somebody is about to want.
+
         return recovery;
     }
     recovery.attempted = true;
 
-    // Put the transfer interrupt back first and give Process9 a chance to
-    // finish its own transfer properly. Its handler is the normal drain path,
-    // and letting it run returns the data to its owner instead of discarding
-    // it. Only if that does not clear BUSY does this module drain the block
-    // itself, which unwedges the controller at the cost of that transfer.
     if ((recovery.mCardControlBefore & mCardEnable) != 0 && (recovery.mCardControlBefore & mCardTransferIrq) == 0) {
         bus.write16(RegisterOffset::MCardControl, static_cast<std::uint16_t>(recovery.mCardControlBefore | mCardTransferIrq));
         recovery.restoredTransferIrq = true;
@@ -1177,7 +1013,6 @@ NtrCard::SectorReadResult NtrCard::readMainModeSector(CardBus& bus, std::uint32_
     const std::uint32_t initialCommandLow  = bus.read32(RegisterOffset::CommandLow);
     ControllerStateRestorer restore(bus, result.initialMCardControl, result.initialRomControl, initialCommandHigh, initialCommandLow);
 
-    // The completion IRQ belongs to Process9 and is never masked here.
     std::uint16_t polledMCardControl = result.initialMCardControl;
     const CommandResult transfer     = runPolledCommand(
         bus, mainReadCommand, offset, normalRomControl, romSectorBlockSize, polledMCardControl, result.data.data(), result.data.size(), timeoutTicks);
@@ -1275,8 +1110,7 @@ NtrCard::NandRangeReadResult NtrCard::readNandSaveRange(CardBus& bus, std::uint3
 
 std::uint32_t NtrCard::tunedRomControl(std::uint32_t headerRomControl)
 {
-    // The cartridge header's own KEY gap, which is what Process9 and GodMode9i
-    // both use. Shortening it is a wire-timing change, not a software one.
+
     return headerRomControl;
 }
 
@@ -1368,7 +1202,7 @@ bool NtrCard::waitForMappedBusQuiet(void)
     }
 
     MappedCardBus bus;
-    // 20 ms of continuous idle, giving up after a second.
+
     return waitForBusQuiet(bus, SYSCLOCK_ARM11 / 50, SYSCLOCK_ARM11);
 #else
     return false;
@@ -1398,8 +1232,7 @@ std::optional<NtrCard::NandPageWriteResult> NtrCard::writeMappedNandSavePage(
     }
 
     MappedCardBus bus;
-    // A page write is four transfers, a commit, and a programming cycle, so it
-    // gets the read path's per-command budget rather than a tighter one.
+
     return writeNandSavePage(bus, rwStart, pageOffset, normalRomControl, SYSCLOCK_ARM11 / 10, page, pageWords);
 #else
     (void)rwStart;

@@ -35,8 +35,7 @@ extern "C" {
 }
 
 namespace {
-    // Lazy so curl costs nothing until a script actually transfers. Single
-    // script thread + one run at a time, so no init race.
+
     bool curlReady(void)
     {
         static bool ready = false;
@@ -46,11 +45,6 @@ namespace {
         return ready;
     }
 
-    // Allocation-safe on purpose. The prebuilt curl portlib carries no unwind
-    // info, so a std::bad_alloc out of append() — the realistic case on an O3DS
-    // pulling a multi-MB body — would unwind into curl's frames and
-    // std::terminate the app. Returning short instead makes curl fail the
-    // transfer with CURLE_WRITE_ERROR, which perform() reports as OutOfMemory.
     size_t writeToString(char* ptr, size_t size, size_t nmemb, void* userdata)
     {
         const size_t n = size * nmemb;
@@ -63,16 +57,11 @@ namespace {
         return n;
     }
 
-    // Nonzero aborts the transfer: a script being aborted mustn't sit in a
-    // transfer it can't reach the per-statement abort hook from.
     int abortOnScriptCancel(void*, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
     {
         return ckpt_script_abort_requested();
     }
 
-    // Upload progress: drives the console's reserved innermost bar, so a script
-    // uploading N files gets a byte-level bar under its own file-level bar
-    // without writing any progress code around the call. Also the abort seam.
     struct UploadProgress {
         int lastPct = -1;
     };
@@ -86,12 +75,7 @@ namespace {
             const int pct = (int)((ulnow * 100) / ultotal);
             if (pct != up->lastPct) {
                 if (up->lastPct < 0) {
-                    // First callback: the total is only known once curl has it.
-                    // The label names the *phase*, never the script's status
-                    // text: a script that also drives an item bar would
-                    // otherwise show the same string on two stacked bars and
-                    // read as a duplicate. "zip" / "unzip" in zip_api.cpp are
-                    // the same convention.
+
                     ScriptConsole::get().beginIo("upload", (long long)ultotal);
                 }
                 up->lastPct = pct;
@@ -101,7 +85,6 @@ namespace {
         return 0;
     }
 
-    // "\n"-separated "Key: Value" lines into a curl slist (nullptr => none).
     struct curl_slist* headerSlist(const char* headers)
     {
         struct curl_slist* hl = nullptr;
@@ -123,9 +106,6 @@ namespace {
         return hl;
     }
 
-    // Everything the four bindings used to spell out one at a time. The only
-    // conditional options are the ones a transfer genuinely varies: verb,
-    // headers, body source, redirect following, progress callback.
     void applyCommonOptions(CURL* curl, const Http::Request& req, std::string* data, std::string* rhdr)
     {
         curl_easy_setopt(curl, CURLOPT_URL, req.url ? req.url : "");
@@ -180,13 +160,13 @@ namespace Http {
         UploadProgress prog;
         applyCommonOptions(curl, req, &res.body, req.captureHeaders ? &res.headers : nullptr);
         if (req.method && req.method[0]) {
-            curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, req.method); // GET/POST/PUT/PATCH/DELETE
+            curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, req.method);
         }
         if (hl) {
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hl);
         }
         if (upload) {
-            curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L); // streamed request body
+            curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
             curl_easy_setopt(curl, CURLOPT_READDATA, upload);
             curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t)uploadSize);
             curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, uploadProgress);
@@ -215,9 +195,7 @@ namespace Http {
 
         if (code != CURLE_OK) {
             res.code = (int)code;
-            // The write callback only ever fails short on an allocation failure,
-            // so this is the out-of-memory report the old inline copies turned
-            // into a terminate().
+
             res.result = code == CURLE_WRITE_ERROR ? Result::OutOfMemory : Result::TransferFailed;
             res.body.clear();
             res.headers.clear();

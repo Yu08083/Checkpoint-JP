@@ -49,8 +49,7 @@ void ScriptLogView::setViewportRows(int rows)
 
 void ScriptLogView::scrollLines(int lines)
 {
-    // The furthest back the pane can go is the oldest line the console still
-    // holds sitting on the top row.
+
     const int total   = (int)ScriptConsole::get().lineCount();
     const int maxBack = std::max(0, total - mViewport);
     mScrollBack       = std::clamp(mScrollBack + lines, 0, maxBack);
@@ -72,16 +71,10 @@ ScriptLogView::Window ScriptLogView::window(void)
         return w;
     }
 
-    // Pinned to the tail unless the user scrolled back, so a talking script
-    // pushes the view along instead of scrolling out from under them. The
-    // scrollback is clamped again here rather than trusted: the console drops
-    // its oldest lines as it grows, which can move the tail under a scrollback
-    // that was in range when it was set.
     const size_t maxFirst = w.total > (size_t)mViewport ? w.total - (size_t)mViewport : 0;
     const size_t back     = std::min((size_t)mScrollBack, maxFirst);
     w.first               = maxFirst - back;
 
-    // Re-copy only when the content or the window actually moved.
     const unsigned gen = console.generation();
     if (gen != mSeenGeneration || w.first != mSeenFirst || mRows.size() != (size_t)mViewport) {
         console.copyWindow(w.first, (size_t)mViewport, mRows);
@@ -89,8 +82,6 @@ ScriptLogView::Window ScriptLogView::window(void)
         mSeenFirst      = w.first;
     }
 
-    // Scrollbar only once there is more than one screenful. maxFirst is then
-    // non-zero, so the travel fraction is safe to divide.
     w.scrollbar = w.total > (size_t)mViewport;
     if (w.scrollbar) {
         w.thumbSpan   = (float)mViewport / (float)w.total;

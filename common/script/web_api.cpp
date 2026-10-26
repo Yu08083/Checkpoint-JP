@@ -24,11 +24,6 @@
  *         reasonable ways as different from the original version.
  */
 
-// Header parsing for the network script API: pure string logic, so it reuses the
-// same TransferProto::headerValue the wireless transfer relies on. The transfers
-// themselves live in httpcall.hpp, behind the web_* bindings in
-// checkpoint_api.cpp.
-
 #include "scriptargs.hpp"
 #include "scriptheap.hpp"
 #include "transferprotocol.hpp"
@@ -44,8 +39,7 @@ extern "C" {
 void ckpt_http_header_value(struct ParseState* Parser, struct Value* ReturnValue, struct Value** Param, int NumArgs)
 {
     const ScriptArgs args(Parser, Param, NumArgs, "http_header_value");
-    // A NULL header block is what web_request leaves behind on a failed
-    // transfer, so it reads as "no headers" rather than as a script error.
+
     const char* headers       = args.strOr(0, "");
     const char* key           = args.str(1);
     ReturnValue->Val->Pointer = strToRet(TransferProto::headerValue(headers, key));

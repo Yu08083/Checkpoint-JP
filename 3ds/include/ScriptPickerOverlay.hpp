@@ -33,10 +33,6 @@
 #include <string>
 #include <vector>
 
-// Modal script picker raised by the Scripts action: universal scripts first,
-// then the selected title's specific ones (tagged with `titleTag`, its short
-// name). A invokes onPick with the chosen entry after dismissing, B cancels.
-// Running the pick (confirm prompt + ScriptRunner) is the caller's business.
 class ScriptPickerOverlay : public ListPickerOverlay {
 public:
     ScriptPickerOverlay(Screen& screen, std::vector<ScriptCatalog::Entry> entries, const std::string& titleTag,

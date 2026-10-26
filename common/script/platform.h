@@ -1,4 +1,3 @@
-/* all platform-specific includes and defines go in this file */
 #ifndef PLATFORM_H
 #define PLATFORM_H
 
@@ -14,46 +13,38 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-/* host platform includes */
 #ifdef UNIX_HOST
 #include <stdint.h>
 #include <unistd.h>
-#elif defined(WIN32) /*(predefined on MSVC)*/
+#elif defined(WIN32)
 #else
 #error ***** A platform must be explicitly defined! *****
 #endif
 
-/* configurable options */
-/* select your host type (or do it in the Makefile):
- #define UNIX_HOST
- #define DEBUGGER
- #define USE_READLINE (defined by default for UNIX_HOST)
- */
-
-#if defined(WIN32) /*(predefined on MSVC)*/
+#if defined(WIN32)
 #undef USE_READLINE
 #endif
 
 #if defined(__hppa__) || defined(__sparc__)
-/* the default data type to use for alignment */
+
 #define ALIGN_TYPE double
 #else
-/* the default data type to use for alignment */
+
 #define ALIGN_TYPE void*
 #endif
 
-#define GLOBAL_TABLE_SIZE (97)         /* global variable table */
-#define STRING_TABLE_SIZE (97)         /* shared string table size */
-#define STRING_LITERAL_TABLE_SIZE (97) /* string literal table size */
-#define RESERVED_WORD_TABLE_SIZE (97)  /* reserved word table size */
-#define PARAMETER_MAX (16)             /* maximum number of parameters to a function */
-#define LINEBUFFER_MAX (256)           /* maximum number of characters on a line */
-#define LOCAL_TABLE_SIZE (11)          /* size of local variable table (can expand) */
-#define STRUCT_TABLE_SIZE (11)         /* size of struct/union member table (can expand) */
-#define GOTO_LABELS_TABLE_SIZE (5)     /* size of goto labels table */
+#define GLOBAL_TABLE_SIZE (97)
+#define STRING_TABLE_SIZE (97)
+#define STRING_LITERAL_TABLE_SIZE (97)
+#define RESERVED_WORD_TABLE_SIZE (97)
+#define PARAMETER_MAX (16)
+#define LINEBUFFER_MAX (256)
+#define LOCAL_TABLE_SIZE (11)
+#define STRUCT_TABLE_SIZE (11)
+#define GOTO_LABELS_TABLE_SIZE (5)
 
 #define INTERACTIVE_PROMPT_START "starting picoc " PICOC_VERSION " (Ctrl+D to exit)\n"
 #define INTERACTIVE_PROMPT_STATEMENT "picoc> "
 #define INTERACTIVE_PROMPT_LINE "     > "
 
-#endif /* PLATFORM_H */
+#endif

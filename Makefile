@@ -29,8 +29,6 @@ format:
 cppcheck:
 	@cppcheck . --enable=all --force 2> cppcheck.log
 
-# Host-side tests. They run on the build machine, not on hardware. See
-# tests/Makefile for what each one covers.
 test:
 	@$(MAKE) -C tests
 

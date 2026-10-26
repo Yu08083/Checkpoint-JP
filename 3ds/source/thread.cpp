@@ -35,7 +35,7 @@
 namespace {
     constexpr int MIN_HANDLES = 2;
     Thread reaperThread;
-    // Exit event, "update your list" event, and threads themselves
+
     DataMutex<std::pair<SmallVector<Thread, Threads::MAX_THREADS>, SmallVector<Handle, MIN_HANDLES + Threads::MAX_THREADS>>> threads;
 
     void reapThread(void* arg)
@@ -45,11 +45,7 @@ namespace {
             {
                 u32 size;
                 const Handle* handles;
-                // Letting the lock expire is fine because the only thing that could happen between
-                // then and the use is adding a handle, which won't change anything since we only
-                // use the original size
-                // In an ideal world, svcWaitSynchronizationN would atomically release and regain
-                // the lock, but we can't have nice things
+
                 {
                     auto lockedThreadData                            = threads.lock();
                     const auto& [lockedThreads, reaperThreadHandles] = *lockedThreadData;
@@ -112,9 +108,7 @@ namespace {
                     return Task{nullptr, nullptr};
                 }
                 else {
-                    // LIFO: pop the most recently queued task. While browsing the title
-                    // list this hands a worker the folder-size job for the title the user
-                    // just landed on before the now-unfocused ones queued earlier.
+
                     Task ret = tasks->back();
                     tasks->pop_back();
                     return ret;
@@ -193,9 +187,7 @@ void Threads::executeTask(void (*task)(void*), void* arg)
 
 void Threads::exit(void)
 {
-    // Idempotent: called explicitly at the end of main (so every worker is joined
-    // before exit() runs static destructors) and again via atexit as a backstop
-    // for early-error exits that never reach the explicit call.
+
     static std::atomic<bool> alreadyExited{false};
     if (alreadyExited.exchange(true)) {
         return;

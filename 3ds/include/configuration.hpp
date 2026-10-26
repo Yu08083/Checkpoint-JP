@@ -57,31 +57,23 @@ public:
     bool isFTPEnabled(void);
     bool quickBackup(void);
     bool autoUpdate(void);
-    // "dark" (default) or "light". Selects the color palette; see Colors::apply.
+
     std::string theme(void);
     std::string language(void);
-    // Last "ip:port" entered in the wireless-transfer send prompt. Prefilled into
-    // the keyboard next time; not surfaced in Settings. Empty until the first send.
+
     std::string lastTransferAddress(void);
-    // Fixed PIN the wireless receiver arms itself with, as 4 ASCII digits. Empty
-    // (the default) means a fresh CSPRNG PIN per receive
+
     std::string defaultReceivePin(void);
-    // Port the HTTP server (wireless receiver + /logs) binds at launch. Always
-    // within TransferProto::validServerPort; an invalid stored value loads as
-    // the default, 8000.
+
     u16 serverPort(void);
     std::vector<std::u16string> additionalSaveFolders(u64 id);
     std::vector<std::u16string> additionalExtdataFolders(u64 id);
 
-    // Whole-list accessors for the Library / Folders settings sections.
     const std::unordered_set<u64>& favoriteIds(void) const { return mFavoriteIds; }
     const std::unordered_set<u64>& filterIds(void) const { return mFilterIds; }
     const std::unordered_map<u64, std::vector<std::u16string>>& saveFolders(void) const { return mAdditionalSaveFolders; }
     const std::unordered_map<u64, std::vector<std::u16string>>& extdataFolders(void) const { return mAdditionalExtdataFolders; }
 
-    // General-settings mutators: update the cached value and the in-memory json,
-    // then mark the config dirty. The SD write is deferred to commit() so a burst
-    // of toggles doesn't block the UI on one slow flush per keypress.
     void setNandSaves(bool v);
     void setDSiWareSaves(bool v);
     void setScanCard(bool v);
@@ -91,23 +83,17 @@ public:
     void setQuickBackup(bool v);
     void setAutoUpdate(bool v);
     void setTheme(const std::string& v);
-    // Persists immediately (calls save()): language changes are rare and must
-    // survive even if no commit() follows before shutdown.
+
     void setLanguage(const std::string& v);
-    // Persists immediately: the send flow doesn't run commit(), and the value
-    // must survive even if the app closes right after a transfer.
+
     void setLastTransferAddress(const std::string& v);
-    // "" restores the random-per-receive default; anything else is stored as
-    // given and only honoured by the receiver when it is 4 digits.
+
     void setDefaultReceivePin(const std::string& v);
-    // Persists immediately: the server only reads the port at launch, so the
-    // value has to be on the SD card by the next one. The caller validates.
+
     void setServerPort(u16 v);
 
-    // Flushes pending changes to config.json (no-op when nothing is dirty).
     void commit(void);
 
-    // Library / Folders list mutators (same save-on-change contract).
     void addFavorite(u64 id);
     void addFilter(u64 id);
     void addSaveFolder(u64 id, const std::u16string& path);
@@ -129,9 +115,7 @@ private:
     void loadFromRomfs(void);
 
     std::unique_ptr<nlohmann::json> mJson;
-    // Guards mFilterIds / mFavoriteIds: the cart-scan and loader threads call
-    // filter()/favorite() while Settings mutates the sets on the UI thread. The
-    // whole-list accessors and JSON writes stay UI-thread-only.
+
     std::mutex mIdMutex;
     std::unordered_set<u64> mFilterIds, mFavoriteIds;
     std::unordered_map<u64, std::vector<std::u16string>> mAdditionalSaveFolders, mAdditionalExtdataFolders;
@@ -141,12 +125,12 @@ private:
     bool mAutoUpdate      = false;
     std::string mTheme    = "dark";
     std::string mLanguage = "ja";
-    std::string mLastTransferAddress; // last "ip:port" sent to; prefills the send keyboard
-    std::string mDefaultReceivePin;   // "" = random PIN per receive
+    std::string mLastTransferAddress;
+    std::string mDefaultReceivePin;
     u16 mServerPort      = TransferProto::kDefaultServerPort;
     std::string BASEPATH = "/3ds/Checkpoint/config.json";
     size_t oldSize       = 0;
-    bool mDirty          = false; // General toggles pending a deferred save()
+    bool mDirty          = false;
 };
 
 #endif

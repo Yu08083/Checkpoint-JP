@@ -55,7 +55,6 @@ void ScriptPickerOverlay::drawRowContent(int k, int rowY, bool selected) const
     const float tagW                  = text.width(tag, 0.42f);
     const float tagX                  = 364 - tagW;
 
-    // "override" marker (an SD file shadowing a bundled one), left of the tag.
     float ovrW = 0;
     if (entry.overridden) {
         const std::string ovr = i18n::t("scripts.overridden_tag");
@@ -81,8 +80,8 @@ void ScriptPickerOverlay::update(const InputState& input)
     u32 kDown = hidKeysDown();
     if ((kDown & KEY_A) && count > 0) {
         ScriptCatalog::Entry entry = mEntries[mHid.fullIndex()];
-        auto pick                  = mOnPick; // copy to the stack: removeOverlay() destroys *this
-        screen.removeOverlay();               // dismiss the picker before running the callback
+        auto pick                  = mOnPick;
+        screen.removeOverlay();
         pick(entry);
         return;
     }

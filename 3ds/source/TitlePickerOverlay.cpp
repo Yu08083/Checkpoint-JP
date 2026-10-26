@@ -35,8 +35,7 @@
 #include <3ds.h>
 
 namespace {
-    // Icon sized into a `side`x`side` box at (x, y): SMDH icons scale down, small
-    // ones sit centered.
+
     void drawIcon(C2D_Image icon, int x, int y, int side)
     {
         if (icon.subtex->width == 48) {
@@ -90,8 +89,8 @@ void TitlePickerOverlay::update(const InputState& input)
         Title title;
         TitleCatalog::get().getTitle(title, mHid.fullIndex(), BackupKind::Save);
         u64 id    = title.id();
-        auto pick = mOnPick;    // copy to the stack: removeOverlay() destroys *this
-        screen.removeOverlay(); // dismiss the picker before running the callback
+        auto pick = mOnPick;
+        screen.removeOverlay();
         pick(id);
         return;
     }

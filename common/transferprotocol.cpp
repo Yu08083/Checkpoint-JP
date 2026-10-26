@@ -38,8 +38,7 @@
 namespace TransferProto {
 
 #if defined(__aarch64__)
-    // Hardware CRC32 on ARMv8. devkitA64 builds with -march=armv8-a+crc, so the
-    // checksum is effectively free instead of a bytewise table loop.
+
     uint32_t updateCrc(uint32_t crc, const uint8_t* data, size_t len)
     {
         uint32_t c = crc;
@@ -84,9 +83,6 @@ namespace TransferProto {
         }
     }
 
-    // Slicing-by-8 CRC32: 8 bytes per iteration instead of 1. On the 268MHz
-    // ARM11 the bytewise loop is slow enough to rival the SD card, so this
-    // keeps the checksum off the transfer's critical path.
     uint32_t updateCrc(uint32_t crc, const uint8_t* data, size_t len)
     {
         initCrc();
@@ -154,34 +150,26 @@ namespace TransferProto {
 
     std::string sanitizeFileName(const std::string& name)
     {
-        // A payload name never legitimately carries a directory: a backup with
-        // subfolders travels as a zip. Keep the basename and drop the rest.
+
         size_t slash     = name.find_last_of("/\\");
         std::string base = (slash == std::string::npos) ? name : name.substr(slash + 1);
 
         std::string out;
         out.reserve(base.size());
         for (unsigned char c : base) {
-            // Control characters and the characters FAT rejects go; '.' and the
-            // bytes of a multi-byte UTF-8 sequence stay.
+
             if (c < 0x20 || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
                 continue;
             }
             out.push_back((char)c);
         }
 
-        // "." and ".." name directories, not files that can be created.
         if (out == "." || out == "..") {
             return "";
         }
         return out;
     }
 
-    // Field names are case-insensitive (RFC 9110 5.1). Go's net/http canonicalises
-    // them before writing, so chlink's "X-CP-Token" reaches us as "X-Cp-Token": a
-    // case-sensitive lookup finds no PIN and every chlink upload dies with 403.
-    // Matching is also anchored to the start of a header line, so a value that
-    // happens to contain "<key>:" cannot impersonate the header.
     std::string headerValue(const std::string& headers, const std::string& key)
     {
         size_t lineStart = 0;
@@ -259,14 +247,14 @@ namespace TransferProto {
 
     std::optional<uint64_t> zipStreamSize(const std::vector<SendFile>& files, const std::vector<std::string>& dirs)
     {
-        uint64_t total = 22; // end of central directory
+        uint64_t total = 22;
         for (const auto& dir : dirs) {
-            total += 30 + dir.size(); // local header
-            total += 46 + dir.size(); // central directory
+            total += 30 + dir.size();
+            total += 46 + dir.size();
         }
         for (const auto& entry : files) {
-            total += 30 + entry.relPath.size() + (uint64_t)entry.size + 16; // local header + data + data descriptor
-            total += 46 + entry.relPath.size();                             // central directory
+            total += 30 + entry.relPath.size() + (uint64_t)entry.size + 16;
+            total += 46 + entry.relPath.size();
         }
         if (total > kZipMaxSize) {
             return std::nullopt;
@@ -284,20 +272,18 @@ namespace TransferProto {
         std::string boundaryMarker     = "--" + boundary;
         std::string nextBoundaryMarker = "\r\n" + boundaryMarker;
 
-        // Meta part.
         size_t metaPos = head.find(boundaryMarker);
         if (metaPos == std::string::npos) {
             outError = "Missing boundary.";
             return false;
         }
-        // File part header.
+
         size_t filePos = head.find("name=\"file\"");
         if (filePos == std::string::npos) {
             outError = "Incomplete form data.";
             return false;
         }
-        // Meta content: between the meta part's header terminator and the boundary
-        // that precedes the file part.
+
         size_t metaHeaderEnd = head.find("\r\n\r\n", metaPos);
         if (metaHeaderEnd == std::string::npos) {
             outError = "Incomplete form data.";
@@ -311,7 +297,6 @@ namespace TransferProto {
         }
         outMeta = head.substr(metaDataStart, metaDataEnd - metaDataStart);
 
-        // File data begins right after the file part's header terminator.
         size_t fileHeaderEnd = head.find("\r\n\r\n", filePos);
         if (fileHeaderEnd == std::string::npos) {
             outError = "Incomplete form data.";
@@ -319,8 +304,6 @@ namespace TransferProto {
         }
         uint64_t fileDataStart = (uint64_t)fileHeaderEnd + 4;
 
-        // The body ends with "\r\n--boundary--\r\n"; the file data is everything
-        // between fileDataStart and that trailing delimiter.
         std::string trailer = "\r\n" + boundaryMarker + "--\r\n";
         if (bodyLen < fileDataStart + trailer.size()) {
             outError = "Incomplete form data.";
@@ -334,8 +317,7 @@ namespace TransferProto {
     bool extractZip(ByteReader& in, uint64_t limit, ExtractSink& sink, const CancelFn& cancelled, const ProgressFn& onBytes, std::string& outError)
     {
         uint64_t consumed = 0;
-        // Reads through the raw source but never past the file part's limit; the
-        // adapter's ByteReader knows nothing about framing, so the bound lives here.
+
         auto readInto = [&](void* dst, size_t n) -> size_t {
             if (consumed + n > limit) {
                 n = (size_t)(limit - consumed);
@@ -391,9 +373,6 @@ namespace TransferProto {
                 }
             }
 
-            // Data-descriptor entries (flag bit 3) are accepted as long as the
-            // local header still carries the real sizes, which is what the
-            // console senders emit when streaming a zip without staging it.
             if (compression != 0) {
                 outError = "Unsupported ZIP compression.";
                 ok       = false;
@@ -449,9 +428,6 @@ namespace TransferProto {
                 break;
             }
 
-            // With flag bit 3 the local-header CRC field is zero and the real
-            // CRC follows the data in a data descriptor (optionally prefixed
-            // with its own signature).
             if (flags & 0x08) {
                 uint8_t desc[16];
                 if (readInto(desc, 4) != 4) {
@@ -478,9 +454,6 @@ namespace TransferProto {
                 }
             }
 
-            // Verify the extracted data against the CRC stored in the ZIP entry,
-            // so a corrupted or truncated transfer is rejected instead of being
-            // written out as-is.
             computedCrc ^= 0xFFFFFFFFu;
             if (computedCrc != crc) {
                 outError = "Checksum mismatch in received file.";
@@ -556,11 +529,11 @@ namespace TransferProto {
             hdr.reserve(30 + entry.relPath.size());
             appendLe32(hdr, 0x04034b50);
             appendLe16(hdr, 20);
-            appendLe16(hdr, 0x0008); // flag bit 3: CRC in the data descriptor
+            appendLe16(hdr, 0x0008);
             appendLe16(hdr, 0);
             appendLe16(hdr, 0);
             appendLe16(hdr, 0);
-            appendLe32(hdr, 0); // CRC, carried by the data descriptor instead
+            appendLe32(hdr, 0);
             appendLe32(hdr, entry.size);
             appendLe32(hdr, entry.size);
             appendLe16(hdr, (uint16_t)entry.relPath.size());
@@ -584,8 +557,7 @@ namespace TransferProto {
                 uint32_t chunk = remaining > kBuf ? (uint32_t)kBuf : remaining;
                 size_t rd      = src.read(buf.get(), chunk);
                 if (rd == 0) {
-                    // Short read: the promised sizes can no longer be met, so
-                    // the transfer must fail rather than desync the stream.
+
                     src.close();
                     return false;
                 }
@@ -631,7 +603,7 @@ namespace TransferProto {
             appendLe16(tail, 0);
             appendLe16(tail, 0);
             appendLe16(tail, 0);
-            appendLe32(tail, entry.isDirectory ? 0x10 : 0); // MS-DOS directory attribute (matches chlink)
+            appendLe32(tail, entry.isDirectory ? 0x10 : 0);
             appendLe32(tail, entry.offset);
             tail.append(entry.name);
         }

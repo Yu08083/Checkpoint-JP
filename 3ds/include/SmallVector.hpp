@@ -43,8 +43,6 @@ private:
         requires std::same_as<U, std::remove_cvref_t<U>> && (OSize > 0) && std::is_destructible_v<U>
     friend class SmallVector;
 
-    // Once again, I really wish anonymous structures were a thing
-    // This allows the data array to have its lifetime start without its elements' lifetime starting
     union SVData {
         struct SubData {
             T data[Size];
@@ -140,7 +138,7 @@ public:
         for (std::size_t i = minsize; i < targetsize; i++) {
             std::construct_at(std::addressof(data()[i]), o[i]);
         }
-        // not destroy_n to avoid overflow
+
         for (std::size_t i = targetsize; i < currentsize; i++) {
             std::destroy_at(std::addressof(data()[i]));
         }
@@ -167,7 +165,7 @@ public:
             std::construct_at(std::addressof(data()[i]), std::move(o[i]));
             std::destroy_at(std::addressof(o[i]));
         }
-        // not destroy_n to avoid overflow
+
         for (std::size_t i = targetsize; i < currentsize; i++) {
             std::destroy_at(std::addressof(data()[i]));
         }
@@ -195,7 +193,6 @@ public:
         }
     }
 
-    // Returns true if the value fit, false if it didn't
     constexpr bool push_back(const T& value) noexcept(std::is_nothrow_copy_constructible_v<T>)
         requires std::is_copy_constructible_v<T>
     {
@@ -289,7 +286,7 @@ public:
         }
         if (size() < capacity()) {
             for (auto i = end() - 1; i >= pos; i--) {
-                // Special case to increase size
+
                 if (i + 1 == end()) {
                     emplace_back(std::move(*(end() - 1)));
                 }
@@ -314,7 +311,7 @@ public:
         }
         if (size() < capacity()) {
             for (auto i = end() - 1; i >= pos; i--) {
-                // Special case to increase size
+
                 if (i + 1 == end()) {
                     emplace_back(std::move(*i));
                 }
@@ -341,7 +338,7 @@ public:
         }
         else if (size() < capacity()) {
             for (auto i = end() - 1; i >= pos; i--) {
-                // Special case to increase size
+
                 if (i + 1 == end()) {
                     emplace_back(std::move(*i));
                 }

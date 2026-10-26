@@ -77,10 +77,10 @@ void Gui::drawPulsingOutline(u32 x, u32 y, u16 w, u16 h, u8 size, u32 color)
 
 void Gui::drawOutline(u32 x, u32 y, u16 w, u16 h, u8 size, u32 color)
 {
-    C2D_DrawRectSolid(x - size, y - size, 0.5f, w + 2 * size, size, color); // top
-    C2D_DrawRectSolid(x - size, y, 0.5f, size, h, color);                   // left
-    C2D_DrawRectSolid(x + w, y, 0.5f, size, h, color);                      // right
-    C2D_DrawRectSolid(x - size, y + h, 0.5f, w + 2 * size, size, color);    // bottom
+    C2D_DrawRectSolid(x - size, y - size, 0.5f, w + 2 * size, size, color);
+    C2D_DrawRectSolid(x - size, y, 0.5f, size, h, color);
+    C2D_DrawRectSolid(x + w, y, 0.5f, size, h, color);
+    C2D_DrawRectSolid(x - size, y + h, 0.5f, w + 2 * size, size, color);
 }
 
 void Gui::drawProgressBar(float x, float y, float w, float h, float frac, const std::string& leftLabel, const std::string& rightLabel)

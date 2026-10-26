@@ -33,42 +33,27 @@
 
 class Title;
 
-// One backup facet (Save or Extdata) of a Title. The single place that answers,
-// for a given BackupKind: what is the root path, the list of existing backups,
-// the full path of backup N, the human-readable name, and how to open its
-// archive.
-//
-// Holds a reference to the Title it was vended from; intended to be used as a
-// short-lived local that does not outlive that Title.
 class BackupTarget {
 public:
     BackupTarget(Title& title, BackupKind kind) : mTitle(title), mKind(kind) {}
 
     BackupKind kind(void) const { return mKind; }
 
-    // The Title this facet was vended from. backup/restore read identity,
-    // presentation and SPI-card details through it. Non-const because the Title
-    // getters are not const-qualified (matching the rest of the codebase).
     Title& title(void) const { return mTitle; }
 
-    std::u16string rootPath(void) const;             // savePath() | extdataPath()
-    std::u16string fullPath(size_t cellIndex) const; // fullSavePath() | fullExtdataPath()
-    std::vector<std::u16string> backups(void) const; // saves() | extdata()
-    const char* dataTypeName(void) const;            // "save" | "extdata"
+    std::u16string rootPath(void) const;
+    std::u16string fullPath(size_t cellIndex) const;
+    std::vector<std::u16string> backups(void) const;
+    const char* dataTypeName(void) const;
 
-    // Opens the underlying archive. `res` receives the FS result. The returned
-    // handle closes itself correctly (FSUSER/FSPXI) on scope exit; on failure the
-    // handle is invalid (evaluates to false). GBA VC raw saves are handled here,
-    // invisibly to the caller.
     ArchiveHandle open(Result& res) const;
 
 private:
-    // The save-data source backing this facet: a raw GBA VC save when the Title
-    // is GBA VC, otherwise a regular CTR save; extdata for the Extdata kind.
+
     SaveDataSource source(void) const;
 
     Title& mTitle;
     BackupKind mKind;
 };
 
-#endif // BACKUPTARGET_HPP
+#endif

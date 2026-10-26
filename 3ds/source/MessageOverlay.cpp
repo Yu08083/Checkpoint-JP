@@ -31,8 +31,7 @@
 
 MessageOverlay::MessageOverlay(Screen& screen, const std::string& mtext, const Style& style) : Overlay(screen), mStyle(style), mText(mtext)
 {
-    // Grow the card to the message before anything is placed: the button row
-    // rides on the card's bottom edge, so its y comes out of the layout too.
+
     mLayout = ModalChrome::fitText(mText, SIZE, !mStyle.header.empty());
     mButton = std::make_unique<Clickable>(
         ModalChrome::BTN_WIDE_X, mLayout.btnY, ModalChrome::BTN_WIDE_W, ModalChrome::BTN_H, style.buttonBg, style.buttonFg, " OK", true);

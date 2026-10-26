@@ -98,7 +98,7 @@ public:
             else {
                 mIndex = mIndex % mRows;
             }
-            // If the above doesn't fix, then forcibly fix
+
             if (mIndex > maxEntries(count)) {
                 mIndex = maxEntries(count);
             }

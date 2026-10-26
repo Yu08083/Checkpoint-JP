@@ -43,8 +43,7 @@ int MenuOverlay::rowCount(void) const
 
 void MenuOverlay::drawEmptyMessage(void) const
 {
-    // Menus are built from a fixed item list, so this never renders; the base
-    // class demands the hook regardless.
+
 }
 
 void MenuOverlay::drawRowContent(int k, int rowY, bool selected) const
@@ -65,8 +64,7 @@ void MenuOverlay::update(const InputState& input)
 
     u32 kDown = hidKeysDown();
     if ((kDown & KEY_A) && count > 0) {
-        // dismissThen copies the callback to the stack before destroying *this,
-        // so an action that raises a follow-up overlay is safe.
+
         dismissThen(mItems[mHid.fullIndex()].action);
         return;
     }

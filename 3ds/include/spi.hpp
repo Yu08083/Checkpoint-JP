@@ -88,11 +88,11 @@ typedef enum {
     FLASH_512KB_1   = 6,
     FLASH_512KB_2   = 7,
     FLASH_1MB       = 8,
-    FLASH_8MB       = 9, // <- must be unlocked (SPIUnlock) then erase-sector + page-program to restore
+    FLASH_8MB       = 9,
     FLASH_STD_DUMMY = 4,
 
     FLASH_512KB_INFRARED = 10,
-    FLASH_256KB_INFRARED = 11, // AFAIK, only "Active Health with Carol Vorderman" has such a flash save memory
+    FLASH_256KB_INFRARED = 11,
     FLASH_INFRARED_DUMMY = 9,
 
     CHIP_LAST = 11,
@@ -110,6 +110,6 @@ Result SPIReadSaveData(CardType type, u32 offset, void* data, u32 size);
 Result SPIEraseSector(CardType type, u32 offset);
 Result SPIUnlock(CardType type);
 
-} // extern "C"
+}
 
 #endif

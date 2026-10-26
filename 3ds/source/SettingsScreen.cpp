@@ -42,18 +42,15 @@
 #include <3ds.h>
 #include <sys/statvfs.h>
 
-// Section indices, used across draw/update.
 enum SectionId { SEC_GENERAL = 0, SEC_LIBRARY, SEC_FOLDERS, SEC_NETWORK, SEC_ABOUT };
 
 namespace {
     struct Section {
-        const char* letter;   // section chip glyph (font-safe single character)
-        const char* nameKey;  // i18n key, resolved at draw time
-        const char* blurbKey; // i18n key, resolved at draw time
+        const char* letter;
+        const char* nameKey;
+        const char* blurbKey;
     };
 
-    // Order matches the redesign mockup's section rail. Text held as i18n keys,
-    // never as localized strings, so a language change is seen live at draw time.
     const Section SECTIONS[] = {
         {"G", "settings.general.title", "settings.general.blurb"},
         {"L", "settings.library.title", "settings.library.blurb"},
@@ -68,10 +65,6 @@ namespace {
         const char* subKey;
     };
 
-    // General section rows, in draw order. Row index maps 1:1 to the mutators
-    // used in update(): 0 light theme, 1 scan_cart, 2 nand_saves,
-    // 3 dsiware_saves, 4 transfer_enabled, 5 confirm_restore, 6 quick_backup,
-    // 7 auto_update.
     const ToggleRow GENERAL_ROWS[] = {
         {"settings.general.light_theme", "settings.general.light_theme.sub"},
         {"settings.general.scan_cart", "settings.general.scan_cart.sub"},
@@ -83,18 +76,13 @@ namespace {
         {"settings.general.auto_update", "settings.general.auto_update.sub"},
     };
     constexpr size_t GENERAL_COUNT = sizeof(GENERAL_ROWS) / sizeof(GENERAL_ROWS[0]);
-    // Extra General row shown first, before the toggles: a language cycler
-    // (en -> it -> es -> en). Kept out of the toggle arrays since it has a
-    // value, not an on/off state; the toggle rows follow at idx 1..GENERAL_COUNT.
+
     constexpr size_t GENERAL_ROW_TOTAL = GENERAL_COUNT + 1;
     constexpr int LANGUAGE_ROW         = 0;
 
-    // Supported language codes, in cycle order. Adding a language only means
-    // appending here (plus its romfs i18n.json entries and isSupported()).
     const std::string LANGUAGES[]   = {"en", "it", "es", "fr", "de", "pt", "nl", "ja", "zh", "ru"};
     constexpr size_t LANGUAGE_COUNT = sizeof(LANGUAGES) / sizeof(LANGUAGES[0]);
 
-    // Display name for a language code, in its own language (never localized).
     const char* languageName(const std::string& code)
     {
         if (code == "it")
@@ -129,9 +117,6 @@ namespace {
 
     constexpr int SAVED_FLASH_FRAMES = 90;
 
-    // Resolves a title id to its short description, falling back to the hex id
-    // for titles not present in the catalog (e.g. a cart that isn't inserted).
-    // Copies out one string, not a full Title.
     std::string titleName(u64 id)
     {
         std::string name;
@@ -189,7 +174,7 @@ size_t SettingsScreen::contentRowCount(size_t section) const
         case SEC_FOLDERS:
             return mFolderRows.size();
         case SEC_NETWORK:
-            return 3; // FTP-server toggle, default receive PIN, server port
+            return 3;
         default:
             return 0;
     }
@@ -227,13 +212,11 @@ void SettingsScreen::drawToggleRow(int y, const std::string& name, const std::st
     TextPool::get().draw(name, 14, y + 4, 0.44f, COLOR_TEXT);
     TextPool::get().draw(sub, 14, y + 18, 0.36f, COLOR_FAINT);
 
-    // Rectangular toggle, right-aligned: a track with a sliding square knob.
     const int tw = 34, th = 18, tx = 320 - 14 - tw, ty = y + (rowH - th) / 2;
     C2D_DrawRectSolid(tx, ty, 0.5f, tw, th, on ? COLOR_ACCENT : COLOR_RAISED);
     const int knob = 14, kpad = 2;
     const int knobX = on ? tx + tw - kpad - knob : tx + kpad;
-    // Knob contrasts with its track in both themes: white on the accent fill when
-    // on, a muted grey on the raised track when off (white-on-light-grey is unreadable).
+
     C2D_DrawRectSolid(knobX, ty + kpad, 0.6f, knob, th - 2 * kpad, on ? COLOR_WHITE : COLOR_MUTED);
 }
 
@@ -247,7 +230,6 @@ void SettingsScreen::drawValueRow(int y, const std::string& name, const std::str
     TextPool::get().draw(name, 14, y + 4, 0.44f, COLOR_TEXT);
     TextPool::get().draw(sub, 14, y + 18, 0.36f, COLOR_FAINT);
 
-    // Right-aligned value in the accent color, matching the toggle's right edge.
     const float vw = TextPool::get().width(value, 0.44f);
     TextPool::get().draw(value, 320 - 14 - vw, y + (rowH - 0.44f * fontGetInfo(NULL)->lineFeed) / 2, 0.44f, COLOR_ACCENT);
 }
@@ -287,7 +269,6 @@ void SettingsScreen::drawTop(void) const
     C2D_TargetClear(g_bottom, COLOR_BASE);
     C2D_SceneBegin(g_top);
 
-    // Header bar.
     C2D_DrawRectSolid(0, 0, 0.5f, 400, 24, COLOR_SURFACE);
     C2D_DrawRectSolid(0, 24, 0.5f, 400, 1, COLOR_LINE);
     C2D_ImageTint brandTint;
@@ -301,7 +282,6 @@ void SettingsScreen::drawTop(void) const
         TextPool::get().draw(right, 400 - 6 - w, 6, 0.42f, COLOR_FAINT);
     }
 
-    // Section rail (left) + section blurb card (right).
     const size_t sel     = navHid.index();
     const float lineFeed = fontGetInfo(NULL)->lineFeed;
     for (size_t i = 0; i < SECTION_COUNT; i++) {
@@ -318,18 +298,16 @@ void SettingsScreen::drawTop(void) const
             const float cy = chipY + (chipSz - 0.5f * lineFeed) / 2;
             TextPool::get().draw(SECTIONS[i].letter, 14 + (chipSz - cw) / 2, cy, 0.5f, isSel ? COLOR_WHITE : COLOR_MUTED);
         }
-        // Name is vertically centered against the chip square rather than top-aligned.
+
         const float ny = chipY + (chipSz - 0.44f * lineFeed) / 2;
         TextPool::get().draw(i18n::t(SECTIONS[i].nameKey), 42, ny, 0.44f, isSel ? COLOR_TEXT : COLOR_MUTED);
     }
 
-    // Blurb card.
     C2D_DrawRectSolid(166, 34, 0.5f, 226, 160, COLOR_CARD);
     Gui::drawOutline(166, 34, 226, 160, 1, COLOR_LINE);
     TextPool::get().draw(i18n::t(SECTIONS[sel].nameKey), 178, 44, 0.5f, COLOR_TEXT);
     TextPool::get().drawWrapped(i18n::t(SECTIONS[sel].blurbKey), 178, 66, 0.44f, COLOR_MUTED, 202);
 
-    // Footer.
     C2D_DrawRectSolid(0, 220, 0.5f, 400, 20, COLOR_SURFACE);
     C2D_DrawRectSolid(0, 219, 0.5f, 400, 1, COLOR_LINE);
     if (contentFocus) {
@@ -350,8 +328,7 @@ void SettingsScreen::drawGeneral(void) const
     Configuration& cfg             = Configuration::getInstance();
     const bool vals[GENERAL_COUNT] = {cfg.theme() == "light", cfg.shouldScanCard(), cfg.nandSaves(), cfg.dsiwareSaves(), cfg.transferEnabled(),
         cfg.confirmRestore(), cfg.quickBackup(), cfg.autoUpdate()};
-    // Windowed like the Library/Folders lists: more rows than fit scroll under a
-    // right-edge scrollbar. Stride 34 matches drawScrollbar's track geometry.
+
     for (int i = 0; i < VISIBLE_ROWS && contentOffset + i < (int)GENERAL_ROW_TOTAL; i++) {
         const int idx  = contentOffset + i;
         const int rowY = 30 + i * 34;
@@ -360,7 +337,7 @@ void SettingsScreen::drawGeneral(void) const
                 contentFocus && contentCursor == idx);
         }
         else {
-            // Toggles follow the language row, so shift by one into the toggle arrays.
+
             const int g = idx - 1;
             drawToggleRow(rowY, i18n::t(GENERAL_ROWS[g].nameKey), i18n::t(GENERAL_ROWS[g].subKey), vals[g], contentFocus && contentCursor == idx);
         }
@@ -438,22 +415,16 @@ void SettingsScreen::drawNetwork(void) const
 {
     Configuration& cfg = Configuration::getInstance();
 
-    // Row 0: the interactive FTP-server toggle.
     const bool ftpOn = cfg.isFTPEnabled();
     drawToggleRow(26, i18n::t("settings.network.ftp"), i18n::t("settings.network.ftp.sub"), ftpOn, contentFocus && contentCursor == 0);
 
-    // Row 1: the fixed receive PIN, or "Random" for the per-receive default.
     const std::string pin = cfg.defaultReceivePin();
     drawValueRow(60, i18n::t("settings.network.receive_pin"), i18n::t("settings.network.receive_pin.sub"),
         pin.empty() ? i18n::t("settings.network.receive_pin.random") : pin, contentFocus && contentCursor == 1);
 
-    // Row 2: the configured server port. The addresses below show the port the
-    // server bound at launch, so the two differ until the next restart.
     drawValueRow(94, i18n::t("settings.network.server_port"), i18n::t("settings.network.server_port.sub"), std::to_string(cfg.serverPort()),
         contentFocus && contentCursor == 2);
 
-    // The wireless-transfer master switch stays on the General tab; what is left
-    // here is read-only status, which starts below the three interactive rows.
     int y      = 132;
     auto field = [&](const std::string& label, const std::string& value, u32 valColor) {
         TextPool::get().draw(label, 20, y, 0.4f, COLOR_FAINT);
@@ -473,8 +444,7 @@ void SettingsScreen::drawNetwork(void) const
         address.empty() ? COLOR_MUTED : COLOR_TEXT);
 
     if (contentFocus) {
-        // Rows 1 and 2 open a keypad rather than flipping a switch, so the verb
-        // follows the cursor.
+
         const std::string act = i18n::t(contentCursor > 0 ? "hint.edit" : "hint.toggle");
         drawHints(320, 223, std::string(GLYPH_A) + " " + act + "     " + GLYPH_B + " " + i18n::t("hint.back"));
     }
@@ -521,18 +491,15 @@ void SettingsScreen::drawBottom(void) const
 
     const size_t sel = navHid.index();
 
-    // Header.
     C2D_DrawRectSolid(0, 0, 0.5f, 320, 24, COLOR_SURFACE);
     C2D_DrawRectSolid(0, 24, 0.5f, 320, 1, COLOR_LINE);
     TextPool::get().draw(i18n::t(SECTIONS[sel].nameKey), 10, 4, 0.5f, COLOR_TEXT);
     if (sectionInteractive(sel) && savedTimer > 0) {
-        std::string saved = "\xE2\x97\x8F " + i18n::t("common.saved"); // "● Saved"
+        std::string saved = "\xE2\x97\x8F " + i18n::t("common.saved");
         float w           = TextPool::get().width(saved, 0.4f);
         TextPool::get().draw(saved, 320 - 10 - w, 6, 0.4f, COLOR_TEAL);
     }
 
-    // Footer bar (content is drawn by the per-section helpers, which also emit
-    // the section-specific footer hints over it).
     C2D_DrawRectSolid(0, 220, 0.5f, 320, 20, COLOR_SURFACE);
     C2D_DrawRectSolid(0, 219, 0.5f, 320, 1, COLOR_LINE);
 
@@ -559,17 +526,15 @@ void SettingsScreen::toggleGeneral(int idx)
 {
     Configuration& cfg = Configuration::getInstance();
     if (idx == LANGUAGE_ROW) {
-        // Cycle en -> it -> es -> en. Persist to config and switch live; every
-        // t() call from the next frame resolves against the new language.
+
         const std::string next = LANGUAGES[(languageIndex(i18n::language()) + 1) % LANGUAGE_COUNT];
         cfg.setLanguage(next);
         i18n::setLanguage(next);
-        // The content-keyed TextPool cache needs no flush: new-language strings
-        // are cache misses that re-parse lazily; stale entries age out on rebuild.
+
         savedTimer = SAVED_FLASH_FRAMES;
         return;
     }
-    // Toggles follow the language row, so shift by one into the toggle arrays.
+
     const int g = idx - 1;
     switch (g) {
         case 0:
@@ -598,7 +563,7 @@ void SettingsScreen::toggleGeneral(int idx)
             cfg.setAutoUpdate(!cfg.autoUpdate());
             break;
     }
-    // Cart scan, NAND saves and DSiWare saves change which titles the grid loads.
+
     if (g == 1 || g == 2 || g == 3) {
         g_titlesDirty = true;
     }
@@ -607,12 +572,10 @@ void SettingsScreen::toggleGeneral(int idx)
 
 void SettingsScreen::editReceivePin(void)
 {
-    // 0 is the "no fixed PIN" sentinel rather than a fourth-digit-zero PIN: the
-    // keypad has no way to express "clear", and 0000 is the one value a user
-    // gains nothing by pinning.
+
     const int entered = KeyboardManager::get().numpad(i18n::t("settings.network.receive_pin.prompt"), 0, 9999);
     if (entered < 0) {
-        return; // cancelled
+        return;
     }
     Configuration::getInstance().setDefaultReceivePin(entered == 0 ? "" : StringUtils::format("%04d", entered));
     savedTimer = SAVED_FLASH_FRAMES;
@@ -620,11 +583,10 @@ void SettingsScreen::editReceivePin(void)
 
 void SettingsScreen::editServerPort(void)
 {
-    // The keypad's range filter keeps the value within validServerPort, so
-    // whatever comes back confirmed can be stored as is.
+
     const int entered = KeyboardManager::get().numpad(i18n::t("settings.network.server_port.prompt"), TransferProto::kMinServerPort, 65535);
     if (entered < 0) {
-        return; // cancelled
+        return;
     }
     Configuration::getInstance().setServerPort((u16)entered);
     savedTimer = SAVED_FLASH_FRAMES;
@@ -635,7 +597,6 @@ void SettingsScreen::update(const InputState& input)
     u32 kDown        = hidKeysDown();
     const size_t sel = navHid.index();
 
-    // Touch toggles a General row directly, from either focus state.
     if (sel == SEC_GENERAL && (kDown & KEY_TOUCH)) {
         for (int i = 0; i < VISIBLE_ROWS && contentOffset + i < (int)GENERAL_ROW_TOTAL; i++) {
             const int idx  = contentOffset + i;
@@ -657,12 +618,12 @@ void SettingsScreen::update(const InputState& input)
                 contentFocus  = true;
                 contentCursor = 0;
                 contentOffset = 0;
-                rebuildRows(); // refresh the row cache on entering an interactive section
+                rebuildRows();
             }
         }
         else if (kDown & KEY_B) {
-            Configuration::getInstance().commit(); // flush any deferred General toggles
-            g_pendingScreen = mParent;             // leave Settings, restore the parent screen
+            Configuration::getInstance().commit();
+            g_pendingScreen = mParent;
             return;
         }
     }
@@ -767,9 +728,7 @@ void SettingsScreen::update(const InputState& input)
                     editServerPort();
                 }
                 else {
-                    // Live toggle: the FTP loop thread reads isFTPEnabled() each
-                    // iteration, so this takes effect without a restart. The SD
-                    // write is deferred to commit() on leaving Settings.
+
                     Configuration::getInstance().setFTPEnabled(!Configuration::getInstance().isFTPEnabled());
                     savedTimer = SAVED_FLASH_FRAMES;
                 }
@@ -779,7 +738,6 @@ void SettingsScreen::update(const InputState& input)
             }
         }
 
-        // Clamp cursor + scroll window against the (possibly shrunk) row count.
         const int now = (int)contentRowCount(sel);
         if (contentCursor >= now) {
             contentCursor = now > 0 ? now - 1 : 0;

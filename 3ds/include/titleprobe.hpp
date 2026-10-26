@@ -30,19 +30,9 @@
 #include "iconstore.hpp"
 #include "title.hpp"
 
-// The live-IO producer of a Title value: reads the SMDH / legacy header,
-// probes save & extdata accessibility through SaveDataSource, ensures the
-// on-SD backup directories exist, and populates the given Title.
-//
-// Symmetric with TitleCache::decode, the other Title producer (which rebuilds a
-// Title from the cache with no IO). Both live outside the Title value; Title no
-// longer carries its own filesystem-touching constructor.
 namespace TitleProbe {
-    // Populate `title` by probing the title `id` on `media`/`card`, storing its
-    // icon bytes into `icons` under `id`. Returns true when at least one backup
-    // facet (save, raw GBA, or extdata) is accessible and its backup directory
-    // could be created.
+
     bool probe(Title& title, u64 id, FS_MediaType media, FS_CardType card, IconStore& icons);
 }
 
-#endif // TITLEPROBE_HPP
+#endif

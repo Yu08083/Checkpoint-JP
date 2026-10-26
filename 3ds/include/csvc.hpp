@@ -20,22 +20,14 @@
 
 #include <3ds/types.h>
 
-/// Operations for svcControlService
 enum ServiceOp {
-    SERVICEOP_STEAL_CLIENT_SESSION = 0, ///< Steal a client session given a service or global port name
-    SERVICEOP_GET_NAME,                 ///< Get the name of a service or global port given a client or session handle
+    SERVICEOP_STEAL_CLIENT_SESSION = 0,
+    SERVICEOP_GET_NAME,
 };
 
 inline Handle FsPxiHandle;
 
 extern "C" {
-/**
- * @brief Performs actions related to services or global handles.
- * @param op The operation to perform, see @ref ServiceOp.
- *
- * Examples:
- *     svcControlService(SERVICEOP_GET_NAME, (char [12])outName, (Handle)clientOrSessionHandle);
- *     svcControlService(SERVICEOP_STEAL_CLIENT_SESSION, (Handle *)&outHandle, (const char *)name);
- */
+
 Result svcControlService(ServiceOp op, ...);
 }

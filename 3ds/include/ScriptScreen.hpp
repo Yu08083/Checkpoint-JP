@@ -35,45 +35,24 @@
 #include <string>
 #include <vector>
 
-// The screen a script run owns, start to finish. It replaces MainScreen for the
-// duration (holding it alive so its selection and scroll survive) and lays the
-// run out as two tiles, one per screen: the whole transcript on top, and on the
-// bottom whatever the script is asking — or, while it is not asking anything,
-// its status line and progress bars. MainScreen knows nothing about scripts
-// beyond launching one.
-//
-// The run's own state lives in ScriptRunner (the worker) and ScriptConsole (the
-// output); this screen only renders them and pumps the UI bridge. Which request
-// kind becomes which dialog is common/script's business (ScriptRequestSink);
-// this screen supplies the 3DS dialogs and nothing more.
 class ScriptScreen : public Screen, public ScriptRequestSink {
 public:
-    // `previous` is the screen to return to once the user closes the finished
-    // run — kept alive rather than rebuilt, so nothing is reloaded.
+
     explicit ScriptScreen(std::shared_ptr<Screen> previous, std::string scriptName);
     ~ScriptScreen(void) override;
 
-    // True while a script session owns the screens. main.cpp asks before routing
-    // the D-Pad to the log pane; a plain type test is out (no RTTI in this build), and
-    // "a script is running" is not the same thing — the pane stays up, and
-    // scrollable, after the run has finished.
     static bool showing(void);
 
-    // Tells ScriptConsole how wide a log row is, in monospace columns, so it can
-    // wrap output as it arrives and one stored line is exactly one drawn row.
-    // Called once at startup: the width is fixed by the tile and the font, and
-    // fixing it before any script runs keeps every line wrapped the same way.
     static void configureLogWidth(void);
 
     void drawTop(void) const override;
     void drawBottom(void) const override;
     void update(const InputState& input) override;
 
-    // START must not quit the app out from under a running script.
     bool allowsExit(void) const override { return false; }
 
 private:
-    // ScriptRequestSink: the 3DS half of a script's UI request.
+
     void showMessage(const std::string& prompt) override;
     void showConfirm(const std::string& prompt) override;
     void showPickOne(const std::string& prompt, const std::vector<std::string>& items) override;
@@ -81,17 +60,11 @@ private:
     std::string keyboard(const std::string& prompt, size_t maxChars) override;
     int numpad(const std::string& prompt, int min, int max) override;
 
-    // Static because exactly one script runs at a time, and main.cpp asks
-    // without holding the screen. Where the pane is scrolled to is
-    // ScriptLogView's business, not this screen's.
     static bool sShowing;
 
     std::shared_ptr<Screen> mPrevious;
     std::string mName;
 
-    // Set once the worker's outcome has been collected; the screen then waits
-    // for the user instead of returning on its own, so the last lines of a
-    // finished run stay readable.
     bool mFinished = false;
     ScriptRunner::Outcome mOutcome;
 };

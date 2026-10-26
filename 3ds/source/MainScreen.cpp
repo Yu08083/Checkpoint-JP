@@ -48,27 +48,19 @@
 #include <3ds.h>
 #include <optional>
 
-// ---- v4 main-page geometry ----------------------------------------------
-// Top grid (400x240): 8 columns x 4 rows of native 48px SMDH tiles, 1px gap,
-// centered. Full-size icons (no downscale) keep them crisp, matching the old
-// main screen; the 1px gap gives the grid a little breathing room.
 static constexpr size_t rowlen = 4, collen = 8;
 static constexpr int HEADER_H = 24, FOOTER_H = 20;
 static constexpr int TILE = 48, GAP = 1;
-static constexpr int GRID_LEFT = (400 - (8 * TILE + 7 * GAP)) / 2; // = 4
-static constexpr int GRID_TOP  = HEADER_H + 1;                     // = 25
+static constexpr int GRID_LEFT = (400 - (8 * TILE + 7 * GAP)) / 2;
+static constexpr int GRID_TOP  = HEADER_H + 1;
 
-// Detail action row: spans x 8..312 at y 182, buttons separated by an 8px gap.
-// With wireless transfer on it holds the Backup / Send / Restore trio of equal
-// thirds; with transfer off Send isn't drawn, so Backup and Restore take half
-// the row each instead of leaving a hole in the middle of it.
 static constexpr int ACTION_X   = 8;
 static constexpr int ACTION_Y   = 182;
 static constexpr int ACTION_W   = 304;
 static constexpr int ACTION_H   = 30;
 static constexpr int ACTION_GAP = 8;
-static constexpr int ACTION_W3  = (ACTION_W - 2 * ACTION_GAP) / 3; // = 96
-static constexpr int ACTION_W2  = (ACTION_W - ACTION_GAP) / 2;     // = 148
+static constexpr int ACTION_W3  = (ACTION_W - 2 * ACTION_GAP) / 3;
+static constexpr int ACTION_W2  = (ACTION_W - ACTION_GAP) / 2;
 
 namespace {
     std::optional<std::u16string> chooseBackupDst(const BackupTarget& target, size_t cellIndex)
@@ -77,8 +69,7 @@ namespace {
             return target.fullPath(cellIndex);
         }
         std::string suggestion = DateTime::dateTimeStr();
-        // Quick backup (or multi-select) skips the swkbd prompt and takes the
-        // timestamp directly
+
         const bool skipKeyboard = MS::multipleSelectionEnabled() || Configuration::getInstance().quickBackup();
         std::u16string name     = skipKeyboard ? StringUtils::UTF8toUTF16(suggestion.c_str()) : KeyboardManager::get().keyboard(suggestion);
         if (name.empty()) {
@@ -87,10 +78,6 @@ namespace {
         return target.rootPath() + StringUtils::UTF8toUTF16("/") + name;
     }
 
-    // Draws a single button-glyph footer hint line, centered on `screenW`. The line
-    // shrinks rather than truncates: drawCentered() would ellipsize a hint that
-    // overflows, and a footer that silently drops its last hint is worse than one
-    // set a couple of points smaller.
     void drawHints(int screenW, int y, const std::string& text)
     {
         TextPool& pool    = TextPool::get();
@@ -98,9 +85,6 @@ namespace {
         pool.drawCentered(text, 0, screenW, y, scale, COLOR_MUTED);
     }
 
-    // Layout of the Save / Extdata segmented control in the bottom header. Both
-    // drawBottom() and the touch hit-test derive from this so the box and the
-    // labels can never drift apart. Cell widths follow the rendered label width.
     struct SegGeometry {
         int segX, segY, segH, pad, cellSaveW, cellExtW;
         int width(void) const { return cellSaveW + cellExtW; }
@@ -125,14 +109,11 @@ MainScreen::MainScreen(void) : hid(rowlen * collen, collen)
     selectionTimer  = 0;
     transferEnabled = Configuration::getInstance().transferEnabled();
 
-    // Detail action row. Backup is the primary (accent), Restore secondary, and
-    // Send sits between them while wireless transfer is enabled;
-    // layoutActionButtons() sizes the pair for whichever arrangement is current.
     buttonBackupAL =
         std::make_unique<Clickable>(ACTION_X, ACTION_Y, ACTION_W3, ACTION_H, COLOR_ACCENT, COLOR_WHITE, i18n::t("main.backup_short"), true);
     buttonRestoreAL =
         std::make_unique<Clickable>(ACTION_X, ACTION_Y, ACTION_W3, ACTION_H, COLOR_RAISED, COLOR_TEXT, i18n::t("main.restore_short"), true);
-    // Full-width batch-backup button shown only while multi-selecting.
+
     buttonBackupAll =
         std::make_unique<Clickable>(ACTION_X, ACTION_Y, ACTION_W, ACTION_H, COLOR_ACCENT, COLOR_WHITE, i18n::t("main.backup_selected"), true);
     buttonSend = std::make_unique<Clickable>(
@@ -147,15 +128,10 @@ MainScreen::MainScreen(void) : hid(rowlen * collen, collen)
     ver = StringUtils::versionString();
 
     C2D_PlainImageTint(&flagTint, COLOR_TEAL, 1.0f);
-    C2D_PlainImageTint(&checkboxTint, COLOR_BLUE, 1.0f); // blue check on the white selection chip
-    C2D_PlainImageTint(&starTint, COLOR_BLACK, 1.0f);    // black star on the gold favorite chip
+    C2D_PlainImageTint(&checkboxTint, COLOR_BLUE, 1.0f);
+    C2D_PlainImageTint(&starTint, COLOR_BLACK, 1.0f);
 }
 
-// Sizes Backup/Restore for the current action-row arrangement: thirds while Send
-// shares the row, halves of it otherwise. Called whenever transferEnabled
-// changes, so both drawing and the touch hit-test (Clickable reads the same box)
-// follow what is on screen. The labels are picked to match in drawBottom(),
-// which has to resolve them per frame anyway to track a live language change.
 void MainScreen::layoutActionButtons(void)
 {
     const int w = transferEnabled ? ACTION_W3 : ACTION_W2;
@@ -177,8 +153,7 @@ void MainScreen::drawSelector(void) const
 {
     const int x = cellX(hid.index());
     const int y = cellY(hid.index());
-    // No wash over the icon: the pulsing ring alone marks the selection, which
-    // keeps bright icons from turning into a bright-on-bright smear.
+
     Gui::drawPulsingOutline(x, y, TILE, TILE, 2, COLOR_RING);
 }
 
@@ -189,11 +164,11 @@ void MainScreen::drawTile(size_t k) const
     C2D_DrawRectSolid(x, y, 0.5f, TILE, TILE, COLOR_CARD);
     C2D_Image icon = TitleCatalog::get().icon(k, backupKind);
     if (icon.subtex->width == 48) {
-        // Native 48px SMDH icon fills the 48px tile 1:1 — no scaling, no aliasing.
+
         C2D_DrawImageAt(icon, x, y, 0.5f, nullptr, 1.0f, 1.0f);
     }
     else {
-        // Smaller icons (DS/other) sit centered, unscaled.
+
         const int off = (TILE - icon.subtex->width) / 2;
         C2D_DrawImageAt(icon, x + off, y + off, 0.5f, nullptr, 1.0f, 1.0f);
     }
@@ -212,12 +187,10 @@ void MainScreen::drawTop(void) const
     C2D_TargetClear(g_bottom, COLOR_BASE);
     C2D_SceneBegin(g_top);
 
-    // Header bar. Slightly thinner than HEADER_H so the top screen reads lighter;
-    // the tile grid stays put because GRID_TOP is fixed, not derived from this.
     static constexpr int TOP_HEADER_H = 22;
     C2D_DrawRectSolid(0, 0, 0.5f, 400, TOP_HEADER_H, COLOR_SURFACE);
     C2D_DrawRectSolid(0, TOP_HEADER_H, 0.5f, 400, 1, COLOR_LINE);
-    // Brand mark + wordmark. Flag tinted with the Checkpoint primary (accent).
+
     C2D_ImageTint brandTint;
     C2D_PlainImageTint(&brandTint, COLOR_ACCENT, 1.0f);
     C2D_DrawImageAt(flag, 6, 3, 0.5f, &brandTint, 1.0f, 1.0f);
@@ -225,7 +198,6 @@ void MainScreen::drawTop(void) const
     nameX += text.draw("Checkpoint JP", nameX, 4, 0.5f, COLOR_TEXT) + 6;
     text.draw(ver, nameX, 6, 0.4f, COLOR_FAINT);
 
-    // Right cluster: time, count / multi-select badge.
     std::string timeStr = DateTime::timeStr();
     {
         float w = text.width(timeStr, 0.42f);
@@ -256,21 +228,15 @@ void MainScreen::drawTop(void) const
         return;
     }
 
-    // An empty grid drew nothing at all, so the one screen where the user has no
-    // tile to act on was also the one that said least: no message, and no clue
-    // that the list can be rescanned without closing Checkpoint (#580). The
-    // rescan lives in the SELECT menu, so the hint points there.
     if (count == 0) {
         text.drawCentered(i18n::t("main.no_titles"), 0, 400, 100, 0.55f, COLOR_MUTED);
         text.drawCentered(i18n::t("main.refresh_hint", {"SELECT"}), 0, 400, 122, 0.44f, COLOR_FAINT);
     }
 
-    // Tiles.
     for (size_t k = hid.page() * entries; k < hid.page() * entries + max; k++) {
         drawTile(k);
     }
 
-    // Multi-select veil + badges, favorite pips.
     for (size_t k = hid.page() * entries; k < hid.page() * entries + max; k++) {
         const int x = cellX(k), y = cellY(k);
         const bool checked = !selEnt.empty() && std::find(selEnt.begin(), selEnt.end(), k) != selEnt.end();
@@ -278,10 +244,7 @@ void MainScreen::drawTop(void) const
         if (multi && !checked && k != hid.fullIndex()) {
             C2D_DrawRectSolid(x, y, 0.5f, TILE, TILE, COLOR_DIM);
         }
-        // Corner badges. The chip is 16px; the sprite art is 24px, so it is offset
-        // by (16-24)/2 = -4 on both axes to sit centered on the chip. The favorite
-        // star is drawn first so the multi-select check lands on top of it — when a
-        // title is both, the selection state must stay visible.
+
         constexpr int CHIP = 16, SPR = 24, SPR_OFF = (CHIP - SPR) / 2;
         const int cx = x + TILE - CHIP - 1, cy = y + 1;
         if (k < gridFavorites.size() && gridFavorites[k]) {
@@ -297,13 +260,10 @@ void MainScreen::drawTop(void) const
         }
     }
 
-    // Breathing selector drawn last so its ring sits above every veil and badge.
     if (count > 0) {
         drawSelector();
     }
 
-    // Footer hint bar. Slightly thinner than FOOTER_H; top nudged down so it clears
-    // the tile grid, which ends at y=220.
     static constexpr int TOP_FOOTER_TOP = 222;
     C2D_DrawRectSolid(0, TOP_FOOTER_TOP, 0.5f, 400, 240 - TOP_FOOTER_TOP, COLOR_SURFACE);
     C2D_DrawRectSolid(0, TOP_FOOTER_TOP - 1, 0.5f, 400, 1, COLOR_LINE);
@@ -314,7 +274,6 @@ void MainScreen::drawTop(void) const
         drawHints(400, 224, " Open     Tag     Extdata    SELECT Menu");
     }
 
-    // Live transfer status (network sends draw their own modal on the bottom).
     const TransferSnapshot& ts = mTransfer;
     if (ts.active && ts.kind == TransferKind::Network) {
         C2D_DrawRectSolid(0, 0, 0.5f, 400, 240, COLOR_OVERLAY);
@@ -345,12 +304,10 @@ void MainScreen::drawBottom(void) const
     C2D_SceneBegin(g_bottom);
 
     if (selected.valid) {
-        // Header: title name, Save/Extdata segmented control.
+
         C2D_DrawRectSolid(0, 0, 0.5f, 320, HEADER_H, COLOR_SURFACE);
         C2D_DrawRectSolid(0, HEADER_H, 0.5f, 320, 1, COLOR_LINE);
 
-        // Segmented Save / Extdata toggle (right-aligned in the header) — laid out
-        // first so the title name below knows how much width it can use.
         const SegGeometry seg = segmentGeometry();
         {
             C2D_DrawRectSolid(seg.segX, seg.segY, 0.5f, seg.width(), seg.segH, COLOR_RAISED);
@@ -364,7 +321,6 @@ void MainScreen::drawBottom(void) const
         std::string name = text.truncate(selected.name, seg.segX - 8 - 8, 0.5f);
         text.draw(name, 8, 4, 0.5f, COLOR_TEXT);
 
-        // Thin info line: cart identifier, media type, favorite.
         {
             float x         = 8;
             const float y   = 28;
@@ -376,13 +332,11 @@ void MainScreen::drawBottom(void) const
             }
         }
 
-        // Backups card. Rows (entry 0 "New backup", then existing backups with
-        // their async sizes) were rebuilt by refreshSelected() when they changed.
         C2D_DrawRectSolid(8, 46, 0.5f, 304, 132, COLOR_CARD);
         C2D_DrawRectSolid(8, 67, 0.5f, 304, 1, COLOR_LINE);
         text.draw(i18n::t("main.backups"), 16, 49, 0.45f, COLOR_MUTED);
         {
-            // Total: shown once the worker has resolved it; until then a "…" placeholder.
+
             std::string meta = selected.backupCount == 0 ? i18n::t("main.no_backups")
                                : selected.totalSize      ? i18n::t("main.backups_meta",
                                                                {std::to_string(selected.backupCount), StringUtils::humanBytes(*selected.totalSize)})
@@ -392,21 +346,14 @@ void MainScreen::drawBottom(void) const
         }
         directoryList->draw(g_bottomScrollEnabled);
 
-        // Actions. While multi-selecting, one full-width Backup button replaces the
-        // per-title Backup/Restore pair and drives the whole tagged batch.
         if (MS::multipleSelectionEnabled()) {
             buttonBackupAll->text(i18n::t("main.backup_n_selected", {std::to_string(MS::selectedEntries().size())}) + " ");
             buttonBackupAll->draw(0.6f, COLOR_RING);
         }
-        // Backup / Send / Restore. While the transfer feature is on, Send keeps its
-        // slot at all times (greyed until a highlighted existing backup can
-        // actually be sent) so it never swaps identity with another action;
-        // Scripts now lives in the SELECT menu. With the feature off there is no
-        // middle slot at all and Backup/Restore take the whole row.
+
         else {
             const bool sendCtx = g_bottomScrollEnabled && directoryList->index() > 0 && !isReceiveRow(directoryList->index());
-            // Half-width buttons (transfer off) have room for the full labels; the
-            // abbreviations exist only for the narrow thirds of the Send layout.
+
             buttonBackupAL->text(i18n::t(transferEnabled ? "main.backup_short" : "main.backup"));
             buttonRestoreAL->text(i18n::t(transferEnabled ? "main.restore_short" : "main.restore"));
             buttonBackupAL->draw(0.6f, COLOR_RING);
@@ -419,13 +366,10 @@ void MainScreen::drawBottom(void) const
         }
     }
 
-    // Subtle scrim while no title is opened: the top grid holds focus, so the
-    // detail panel reads as inactive until the user drills in (A / Go to saves).
     if (!g_bottomScrollEnabled) {
         C2D_DrawRectSolid(0, 0, 0.5f, 320, 240, COLOR_SCRIM);
     }
 
-    // Footer hint bar.
     C2D_DrawRectSolid(0, 220, 0.5f, 320, FOOTER_H, COLOR_SURFACE);
     C2D_DrawRectSolid(0, 219, 0.5f, 320, 1, COLOR_LINE);
     drawHints(320, 223,
@@ -433,7 +377,6 @@ void MainScreen::drawBottom(void) const
         : g_bottomScrollEnabled        ? " " + i18n::t("hint.confirm") + "      " + i18n::t("hint.delete") + "      " + i18n::t("hint.back")
                                        : " " + i18n::t("main.hint.go_saves"));
 
-    // Live local-copy progress modal (network sends draw on the top screen).
     const TransferSnapshot& ts = mTransfer;
     if (ts.active && ts.kind != TransferKind::Network) {
         C2D_DrawRectSolid(0, 0, 0.5f, 320, 240, COLOR_OVERLAY);
@@ -471,8 +414,7 @@ void MainScreen::drawBottom(void) const
         snprintf(pctStr, sizeof(pctStr), "%d%%", (int)((progress > 1.0f ? 1.0f : progress) * 100));
         drawProgressBar(barY, progress, countStr.c_str(), pctStr);
         barY += 30;
-        // A destination wipe moves the file counter but has no bytes to report, so
-        // the per-file bar is left out rather than drawn permanently flat at 0%.
+
         if (ts.mode != "Clearing") {
             float fileProgress = (ts.currentFileSize > 0) ? (float)ts.currentFileOffset / (float)ts.currentFileSize : 0.0f;
             char kbStr[32];
@@ -482,7 +424,6 @@ void MainScreen::drawBottom(void) const
             drawProgressBar(barY, fileProgress, kbStr, filePctStr);
         }
 
-        // Hold-B-to-cancel is offered for a backup only (see update()).
         if (ts.mode == "Backup") {
             std::string hint = TransferStatus::cancelRequested() ? i18n::t("transfer.cancelling") : i18n::t("transfer.cancel_hint");
             text.drawCentered(hint, mx, mw, my + mh - 17, 0.4f, COLOR_FAINT);
@@ -492,16 +433,9 @@ void MainScreen::drawBottom(void) const
 
 void MainScreen::update(const InputState& input)
 {
-    // Snapshot the live transfer state once for this frame; both draw*() read the
-    // member instead of re-locking TransferStatus. Done before any early return
-    // so the modal keeps updating even while a TransferJob is active.
+
     mTransfer = TransferStatus::snapshot();
 
-    // Hold-B-to-cancel for the transfer modal. Must run before the TransferJob
-    // early returns below: while a transfer is in flight update() bails out right
-    // after the result poll, so this is the only input the modal gets. Cancel is
-    // offered for a network send and for a local backup (mode == "Backup"), never
-    // for a restore — a half-written restore must never be left on the cartridge.
     const bool cancellable = mTransfer.active && (mTransfer.kind == TransferKind::Network || mTransfer.mode == "Backup");
     if (cancellable) {
         if (hidKeysHeld() & KEY_B) {
@@ -517,18 +451,16 @@ void MainScreen::update(const InputState& input)
         mCancelHoldFrames = 0;
     }
 
-    // Re-read in case the Settings page toggled it while this screen was parked.
     if (transferEnabled != Configuration::getInstance().transferEnabled()) {
         transferEnabled = !transferEnabled;
         layoutActionButtons();
     }
 
     if (auto result = TransferJob::get().takeResult()) {
-        // A backup/restore changed one or more folders; drop every cached total so
-        // they get re-walked off-thread (a batch may have touched many titles).
+
         BackupSizeCache::get().invalidateAll();
         if (result->cancelled) {
-            // User-requested stop of a backup: neutral info, not an error.
+
             currentOverlay = std::make_shared<InfoOverlay>(*this, i18n::t("transfer.cancelled"));
         }
         else if (result->ok) {
@@ -547,7 +479,7 @@ void MainScreen::update(const InputState& input)
                 currentOverlay = std::make_shared<InfoOverlay>(*this, i18n::t("main.backup_empty"));
             }
             else if (result->send->stage == Transfer::SendStage::Cancelled) {
-                // User-requested stop: neutral info, not an error.
+
                 currentOverlay = std::make_shared<InfoOverlay>(*this, i18n::t("transfer.cancelled"));
             }
             else {
@@ -576,13 +508,8 @@ void MainScreen::update(const InputState& input)
         handleEvents(input);
     }
 
-    // Refresh the snapshot last so the frame drawn right after already shows the
-    // selection/kind changes the handlers above made.
     refreshSelected();
 
-    // Kick off (or no-op) an off-thread size walk for the selected title; the
-    // cache coalesces repeats and refreshSelected() picks the total up through
-    // the generation bump once the worker lands it.
     if (selected.valid) {
         BackupSizeCache::get().request(selected.id, backupKind, selected.rootPath);
     }
@@ -592,8 +519,6 @@ void MainScreen::refreshSelected(void)
 {
     TitleCatalog& catalog = TitleCatalog::get();
 
-    // While the catalog reloads, show no detail card; the generation bump at the
-    // end of the load triggers the rebuild.
     if (catalog.progress().active) {
         if (selected.valid) {
             selected.valid = false;
@@ -608,7 +533,7 @@ void MainScreen::refreshSelected(void)
 
     if (selected.valid == (count > 0) && selected.fullIndex == hid.fullIndex() && selected.kind == backupKind && selected.catalogGen == catalogGen &&
         selected.sizeGen == sizeGen && selected.transferRow == transferEnabled) {
-        return; // snapshot still describes what is on screen
+        return;
     }
 
     if (!selected.valid || selected.kind != backupKind || selected.catalogGen != catalogGen) {
@@ -642,10 +567,6 @@ void MainScreen::refreshSelected(void)
     selected.favorite  = catalog.favorite(selected.fullIndex, backupKind);
     selected.totalSize = BackupSizeCache::get().total(selected.id, backupKind);
 
-    // Rows: entry 0 is the "New backup" affordance, entry 1 the "Receive" action
-    // (while the transfer feature is enabled), the rest are existing backups
-    // labelled with their (async) size. rowToCell()/cellToRow() depend on this
-    // layout.
     std::vector<std::u16string> dirs = target.backups();
     directoryList->clear();
     for (size_t i = 0; i < dirs.size(); i++) {
@@ -662,7 +583,7 @@ void MainScreen::refreshSelected(void)
                 BackupList::RowKind::Existing);
         }
     }
-    selected.backupCount = dirs.empty() ? 0 : dirs.size() - 1; // entry 0 is "New..."
+    selected.backupCount = dirs.empty() ? 0 : dirs.size() - 1;
 }
 
 void MainScreen::refreshTitlesFull(void)
@@ -746,7 +667,7 @@ void MainScreen::startScriptPicker(void)
 
     const bool hasTitle = selected.valid;
     const u64 titleId   = selected.id;
-    // Bundled (romfs) scripts first, then SD: an SD file of the same name wins.
+
     std::vector<ScriptCatalog::Root> universalRoots = {
         {Paths::bundledUniversalScriptsDir(), ScriptCatalog::Source::Bundled},
         {Paths::universalScriptsDir(), ScriptCatalog::Source::Sd},
@@ -766,12 +687,10 @@ void MainScreen::startScriptPicker(void)
                 [this, entry, hasTitle, titleId]() {
                     this->removeOverlay();
                     std::string idHex = hasTitle ? StringUtils::format("%016llX", titleId) : "";
-                    // HOME stays blocked for the whole run (PKSM precedent): picoc
-                    // cannot be preempted, so a buggy script requires a reboot.
+
                     aptSetHomeAllowed(false);
                     if (ScriptRunner::get().start(entry.path, entry.name, std::move(idHex))) {
-                        // The run owns both screens from here: ScriptScreen holds
-                        // this one alive and hands control back when it is closed.
+
                         g_pendingScreen = std::make_shared<ScriptScreen>(g_screen, entry.name);
                     }
                     else {
@@ -788,12 +707,9 @@ void MainScreen::handleEvents(const InputState& input)
     u32 kDown = hidKeysDown();
     u32 kHeld = hidKeysHeld();
 
-    // SELECT opens the tools menu (Scripts / Settings). The menu is the touch-free
-    // home for actions that used to fight the backup buttons for a slot.
     if (kDown & KEY_SELECT) {
         std::vector<MenuOverlay::Item> items = {
-            // Second home for the rescan: the hold gesture is the fast path, this
-            // is the one a user finds by looking rather than by being told.
+
             {i18n::t("main.refresh"), [this]() { refreshTitlesFull(); }},
             {i18n::t("main.scripts"), [this]() { startScriptPicker(); }},
             {i18n::t("settings.title"), []() { g_pendingScreen = std::make_shared<SettingsScreen>(g_screen); }},
@@ -802,8 +718,6 @@ void MainScreen::handleEvents(const InputState& input)
         return;
     }
 
-    // Touch the Save / Extdata segmented control in the bottom header to switch
-    // kinds. Geometry mirrors drawBottom() exactly so the hit box tracks the label.
     if (selected.valid && (kDown & KEY_TOUCH)) {
         const SegGeometry seg = segmentGeometry();
         if (input.py >= seg.segY && input.py < seg.segY + seg.segH && input.px >= seg.segX && input.px < seg.segX + seg.width()) {
@@ -866,7 +780,7 @@ void MainScreen::handleEvents(const InputState& input)
                         io::deleteBackupFolder(path);
                         TitleCatalog::get().refreshDirectories(title.id());
                         directoryList->setIndex(index - 1);
-                        // Folder shrank; drop its cached size so it is re-walked off-thread.
+
                         BackupSizeCache::get().invalidate(title.id(), backupKind, title.backup(backupKind).rootPath());
                         this->removeOverlay();
                     },
@@ -905,10 +819,6 @@ void MainScreen::handleEvents(const InputState& input)
         selectionTimer = 0;
     }
 
-    // From the snapshot the current frame was drawn from, so input maps to the
-    // buttons the user actually sees.
-    // A highlighted existing backup shows the Backup / Send / Restore trio; Send
-    // goes straight to startTransferSend() (which validates and prompts).
     const bool sendContext =
         transferEnabled && selected.valid && g_bottomScrollEnabled && directoryList->index() > 0 && !isReceiveRow(directoryList->index());
 
@@ -918,8 +828,7 @@ void MainScreen::handleEvents(const InputState& input)
     }
 
     if (MS::multipleSelectionEnabled()) {
-        // One large Backup button (touch or A) backs up the whole tagged batch;
-        // it replaces the per-title Backup/Restore pair while multi-selecting.
+
         if (buttonBackupAll->released() || (kDown & KEY_A) || (kDown & KEY_L)) {
             directoryList->resetIndex();
             std::vector<size_t> list = MS::selectedEntries();
@@ -937,8 +846,7 @@ void MainScreen::handleEvents(const InputState& input)
                 currentOverlay = std::make_shared<YesNoOverlay>(
                     *this, backupConfirmMessage("main.confirm_backup_save"),
                     [this]() {
-                        // The Receive action row has no backup behind it; treat it
-                        // like the "New backup" row (cell 0) for a Backup press.
+
                         const size_t row = directoryList->index();
                         this->doBackup(hid.fullIndex(), isReceiveRow(row) ? 0 : rowToCell(row));
                         TransferJob::get().start();
@@ -990,11 +898,7 @@ size_t MainScreen::cellToRow(size_t cell) const
 
 void MainScreen::startTransferReceive(void)
 {
-    // Receiver lifetime == overlay lifetime (B in the overlay stops it), so no
-    // background-receiver state is introduced here.
-    // The Receive row lives in the selected title's backup list: hand that title
-    // over so an upload whose meta names no installed title lands under it rather
-    // than in an "Unknown" folder.
+
     u64 selectedTitleId = 0;
     if (TitleCatalog::get().getTitleCount(backupKind) > 0) {
         Title selectedTitle;
@@ -1040,7 +944,7 @@ void MainScreen::startTransferSend(void)
         currentOverlay = std::make_shared<ErrorOverlay>(*this, -1, i18n::t("main.invalid_ip_port"));
         return;
     }
-    // Remember a valid address so the next send prefills the keyboard with it.
+
     Configuration::getInstance().setLastTransferAddress(ipPort);
 
     std::string pin = KeyboardManager::get().text("1234", i18n::t("main.pin_prompt"), 5);
@@ -1052,9 +956,6 @@ void MainScreen::startTransferSend(void)
         return;
     }
 
-    // Keyboard + validation happened above on the UI thread; the blocking IO
-    // (zip + socket) runs on the TransferJob worker. Title and params go by
-    // value so nothing here needs to outlive this frame.
     std::string dataType = target.dataTypeName();
     TransferJob::get().enqueueSend(
         std::move(title), std::move(backupPath), std::move(backupName), std::move(dataType), std::move(dst->ip), dst->port, std::move(pin));

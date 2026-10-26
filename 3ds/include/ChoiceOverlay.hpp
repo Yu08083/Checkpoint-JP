@@ -36,13 +36,9 @@
 #include <memory>
 #include <string>
 
-// Two-button modal: one prompt line, a left/right button pair, d-pad + touch
-// selection, A activates the highlighted button. Owns the whole chrome and the
-// update loop; YesNoOverlay is just a configuration.
 class ChoiceOverlay : public Overlay {
 public:
-    // A button in hid-index order; `x` places it (ModalChrome::BTN_LEFT_X or
-    // BTN_RIGHT_X) and `extraKeys` triggers it regardless of the highlight.
+
     struct Button {
         std::string label;
         int x;

@@ -30,7 +30,7 @@
 #include <cstring>
 
 namespace {
-    // NDS ROM header offsets (GBATEK).
+
     constexpr size_t OFF_GAME_CODE    = 0x0C;
     constexpr size_t OFF_UNIT_CODE    = 0x12;
     constexpr size_t OFF_CARD_CONTROL = 0x60;
@@ -38,27 +38,23 @@ namespace {
     constexpr size_t OFF_NAND_ROMEND  = 0x94;
     constexpr size_t OFF_NAND_RWSTART = 0x96;
 
-    // The header stores both NAND offsets in cart units, which differ between an
-    // NTR cart (WarioWare D.I.Y., Jam with the Band) and a TWL one (Face Training).
     constexpr u32 unitSize(u8 unitCode)
     {
         return unitCode == 0 ? 0x20000 : 0x80000;
     }
 
-    // The header says where the RW area starts but not how far it runs, so the
-    // size comes from the game code, as in GodMode9i's cardNandGetSaveSize.
     u32 nandSaveSize(const char* gameCode)
     {
-        // Region byte (gameCode[3]) is not part of the match.
+
         struct Known {
             char code[4];
             u32 size;
         };
         static constexpr Known known[] = {
-            {"UXB", 8u << 20},   // Jam with the Band / Daigasso! Band Brothers DX
-            {"UOR", 16u << 20},  // WarioWare D.I.Y.
-            {"USK", 64u << 20},  // Face Training
-            {"UGD", 128u << 20}, // DS Guide
+            {"UXB", 8u << 20},
+            {"UOR", 16u << 20},
+            {"USK", 64u << 20},
+            {"UGD", 128u << 20},
         };
 
         for (const auto& k : known) {
@@ -94,16 +90,13 @@ DSCard::NandSave DSCard::parseNandSave(const u8* header)
     info.bannerOffset  = readU32(header + OFF_BANNER);
     info.saveSize      = nandSaveSize(info.gameCode);
 
-    // An ordinary cart leaves both fields zero, so a plausible pair is the
-    // detection: nonzero ROM end with the RW area starting at or after it.
     const bool headerSaysNand = info.rawRomEnd != 0 && info.rawRwStart >= info.rawRomEnd;
     if (headerSaysNand) {
         info.romEnd  = (u32)info.rawRomEnd * unitSize(info.unitCode);
         info.rwStart = (u32)info.rawRwStart * unitSize(info.unitCode);
     }
     else if (info.saveSize != 0) {
-        // Jam with the Band (J) is a NAND cart whose header omits the fields; its
-        // RW area sits at the fixed offset GodMode9i falls back to.
+
         info.romEnd  = 0x7200000;
         info.rwStart = 0x7200000;
     }

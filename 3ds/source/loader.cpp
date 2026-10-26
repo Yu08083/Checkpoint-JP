@@ -160,8 +160,7 @@ int TitleCatalog::getTitleCount(BackupKind kind)
 
 C2D_Image TitleCatalog::icon(int i, BackupKind kind)
 {
-    // Runs on the UI/draw thread, so this is where the icon's texture is created
-    // (lazily, by IconStore::get) — the loader worker only ever stored raw bytes.
+
     std::lock_guard<std::mutex> lock(mMutex);
     auto& vec = kind == BackupKind::Save ? mSaves : mExtdatas;
     if (i >= 0 && i < (int)vec.size()) {
@@ -242,8 +241,7 @@ void TitleCatalog::importTitleListCache(std::vector<Title>& saves, std::vector<T
     std::unique_ptr<u8[]> cachesaves(new u8[bytesSaves]);
     u32 readSaves = inputsaves.read(cachesaves.get(), bytesSaves);
     inputsaves.close();
-    // A cache whose size isn't a whole number of entries, or that read short, is
-    // corrupt: treat it as empty rather than decoding desynced/garbage entries.
+
     u32 sizesaves = (bytesSaves % TitleCache::ENTRY_SIZE == 0 && readSaves == bytesSaves) ? bytesSaves / TitleCache::ENTRY_SIZE : 0;
 
     FSStream inputextdatas(Archive::sdmc(), extdataCachePath, FS_OPEN_READ);
@@ -258,7 +256,6 @@ void TitleCatalog::importTitleListCache(std::vector<Title>& saves, std::vector<T
     saves.reserve(sizesaves);
     extdatas.reserve(sizeextdatas);
 
-    // fill the lists with blank titles first
     for (size_t i = 0, sz = std::max(sizesaves, sizeextdatas); i < sz; i++) {
         Title title;
         title.load();
@@ -270,11 +267,6 @@ void TitleCatalog::importTitleListCache(std::vector<Title>& saves, std::vector<T
         }
     }
 
-    // Map each already-loaded save id to its first and last index in `saves`, so
-    // the extdata pass can reuse a decoded save (they share entries) with an O(1)
-    // lookup instead of a linear scan per extdata — this runs on the startup fast
-    // path. Duplicate ids only occur for the cartridge title, hence tracking both
-    // ends (see the i != 0 && first == 0 case below).
     std::unordered_map<u64, size_t> firstIdx;
     std::unordered_map<u64, size_t> lastIdx;
     firstIdx.reserve(sizesaves);
@@ -284,8 +276,8 @@ void TitleCatalog::importTitleListCache(std::vector<Title>& saves, std::vector<T
         const u8* titleData = cachesaves.get() + i * TitleCache::ENTRY_SIZE;
         saves.at(i)         = TitleCache::decode(titleData, icons);
         u64 id              = TitleCache::readId(titleData);
-        firstIdx.emplace(id, i); // keeps the first occurrence
-        lastIdx[id] = i;         // always the latest occurrence
+        firstIdx.emplace(id, i);
+        lastIdx[id] = i;
 
         mCounter++;
     }
@@ -303,7 +295,6 @@ void TitleCatalog::importTitleListCache(std::vector<Title>& saves, std::vector<T
         else {
             size_t first = it->second;
 
-            // avoid to copy a cartridge title into the extdata list twice
             if (i != 0 && first == 0) {
                 extdatas.at(i) = saves.at(lastIdx[id]);
             }
@@ -454,8 +445,7 @@ void TitleCatalog::scanInstalledTitles(std::vector<Title>& saves, std::vector<Ti
 
         for (u32 i = 0; i < count; i++) {
             if (validId(ids_nand[i])) {
-                // NAND holds both native (0004xxxx) and TWL (00048xxx: DSiWare
-                // and system TWL) titles; each group has its own toggle & probe.
+
                 const bool isTwl = ((ids_nand[i] >> 44) & 0xF) == 8;
                 if (isTwl ? dsiwareSaves : nandSaves) {
                     Title title;
@@ -497,7 +487,6 @@ void TitleCatalog::scanInstalledTitles(std::vector<Title>& saves, std::vector<Ti
         mCounter++;
     }
 
-    // always check for PKSM's extdata archive
     bool isPKSMIdAlreadyHere = false;
     for (u32 i = 0; i < count; i++) {
         if (ids[i] == TID_PKSM) {
@@ -580,13 +569,9 @@ void TitleCatalog::loadTitles(bool forceRefreshParam)
 {
     auto totalStart = std::chrono::high_resolution_clock::now();
 
-    // Build the new lists into locals so no lock is held during the slow
-    // SMDH/FS IO; readers keep seeing the previous catalog until the swap.
     std::vector<Title> saves;
     std::vector<Title> extdatas;
-    // Icons for the new catalog are built into a local store too: only raw pixel
-    // bytes are stored here (no GPU calls off the UI thread), and the swap below
-    // hands ownership to mIcons so the outgoing store frees the old textures.
+
     IconStore icons;
     saves.reserve(128);
     extdatas.reserve(128);
@@ -616,8 +601,6 @@ void TitleCatalog::loadTitles(bool forceRefreshParam)
         Logging::error("Unknown exception in loadTitles");
     }
 
-    // Publish atomically: short critical section, old lists and icon textures
-    // land in the locals and are destroyed after the lock is released.
     {
         std::lock_guard<std::mutex> lock(mMutex);
         mSaves.swap(saves);
@@ -634,7 +617,6 @@ void TitleCatalog::loadTitlesThread(void)
 {
     TitleCatalog& self = get();
 
-    // don't load titles while they're loading
     if (self.mLoading) {
         return;
     }
@@ -657,8 +639,7 @@ void TitleCatalog::cartScan(void)
     FSUSER_CardSlotIsInserted(&oldCardIn);
 
     while (self.mDoCartScan.test_and_set()) {
-        // Someone is driving the card bus directly. Querying the slot now would
-        // make Process9 take the controller away mid-transfer.
+
         if (self.mCartScanPaused.load() > 0) {
             self.mCartScanQuiet.store(true);
             svcSleepThread(1'000'000);
@@ -724,11 +705,6 @@ TitleCatalog::CartScanPause::CartScanPause(void)
     self.mCartScanQuiet.store(false);
     self.mCartScanPaused.fetch_add(1);
 
-    // Wait for the poll to acknowledge, so the pause starts after any
-    // FSUSER_CardSlotIsInserted already in flight has returned. Bounded, not a
-    // handshake: the cart-scan thread may itself be the caller (scanCard ->
-    // TitleProbe), in which case nothing will ever acknowledge and waiting for
-    // one would deadlock.
     for (int attempt = 0; attempt < 50 && !self.mCartScanQuiet.load(); attempt++) {
         svcSleepThread(1'000'000);
     }

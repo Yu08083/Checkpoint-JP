@@ -29,12 +29,12 @@
 #include <cstring>
 
 namespace {
-    // CTR icon: 48x48 pixels living in the bottom of a 64x64 RGB565 texture.
+
     const Tex3DS_SubTexture ctrSubt3x = {48, 48, 0.0f, 48 / 64.0f, 48 / 64.0f, 0.0f};
-    // DS legacy card icon: a full 32x32 RGB565 texture.
+
     const Tex3DS_SubTexture dsSubt3x = {32, 32, 0.0f, 1.0f, 1.0f, 0.0f};
 
-    constexpr size_t CTR_PIXELS = 0x900; // 48x48 packed source pixels
+    constexpr size_t CTR_PIXELS = 0x900;
     constexpr size_t DS_PIXELS  = 32 * 32;
 }
 
@@ -70,7 +70,7 @@ void IconStore::erase(u64 id)
 void IconStore::mergeFrom(IconStore& o)
 {
     for (auto& kv : o.mMap) {
-        erase(kv.first); // free any displaced texture before overwriting
+        erase(kv.first);
         mMap.emplace(kv.first, std::move(kv.second));
     }
     o.mMap.clear();
@@ -133,8 +133,6 @@ void IconStore::storeDsIcon(u64 id, const u8* banner)
     };
     const bannerData* iconData = reinterpret_cast<const bannerData*>(banner);
 
-    // Decode the 4bpp paletted banner into the swizzled 32x32 RGB565 layout the
-    // texture expects (CPU-only; the upload happens later in realize()).
     Entry e;
     e.isDs = true;
     e.pixels.assign(DS_PIXELS, 0);
@@ -172,9 +170,7 @@ void IconStore::realize(Entry& e)
     }
     else {
         C3D_TexInit(e.tex, 64, 64, GPU_RGB565);
-        // Bilinear filtering: the grid tile scales this 48px icon down to 44px,
-        // and the default nearest filter makes that shrink look like a bad
-        // downsample.
+
         C3D_TexSetFilter(e.tex, GPU_LINEAR, GPU_LINEAR);
 
         u16* dest = (u16*)e.tex->data + (64 - 48) * 64;
@@ -186,7 +182,6 @@ void IconStore::realize(Entry& e)
         }
     }
 
-    // Pixels are only needed for this one upload; reclaim the RAM.
     std::vector<u16>().swap(e.pixels);
 }
 

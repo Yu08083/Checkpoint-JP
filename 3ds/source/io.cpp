@@ -32,26 +32,14 @@
 #include "gbasave.hpp"
 #include "loader.hpp"
 
-// Synthetic failure Result for a short write (FSFILE_Write reported success but
-// committed fewer bytes than requested — typically a full archive). Negative so
-// R_FAILED() is true; the exact value is opaque, the BackupStage carries meaning.
 static const Result RES_SHORT_WRITE = MAKERESULT(RL_PERMANENT, RS_INTERNAL, RM_FS, RD_TOO_LARGE);
 
-// FS returns this (FS module, WrongArgument) when a read runs past the real,
-// allocated data of a sparse / partly-populated extdata file — FSFILE_Read
-// rejects the whole request instead of short-reading. It is not a hard failure:
-// it marks the true end of readable data, which can fall short of the size
-// FSFILE_GetSize reports. See copyFile's shrink-and-stop handling.
 static const u32 RES_FS_PAST_DATA = 0xD900458B;
 
-// FS returns this when another process holds the file open — HOME Menu keeps the
-// icon cache in its own extdata (/CacheD.dat) open for as long as it runs, so no
-// open of it from an application can succeed (#592). See io::dropInUse.
 static const u32 RES_FS_IN_USE = 0xC92044E6;
 
 static const Result RES_PATH_TOO_LONG = 0xE0E046C8;
 
-// FS returns this when the directory being created is already there.
 static const u32 RES_FS_DIR_EXISTS = 0xC82044B9;
 
 static std::u16string rawBackupFile(const std::u16string& folder)
@@ -70,14 +58,12 @@ static std::u16string rawBackupFile(const std::u16string& folder)
         if (dir.folder(i)) {
             continue;
         }
-        // An AppleDouble sidecar next to the save would otherwise read as a second
-        // candidate and send this back to the canonical name for no reason.
+
         if (HostFiles::isMetadata(StringUtils::UTF16toUTF8(dir.entry(i)))) {
             continue;
         }
         if (!only.empty()) {
-            // More than one candidate: stay with the canonical name so the
-            // failure names the file Checkpoint expects.
+
             return canonical;
         }
         only = folder + dir.entry(i);
@@ -101,9 +87,7 @@ bool io::fileExists(FS_Archive archive, const std::u16string& path)
 
 static Result collectTreeImpl(FS_Archive arch, const std::u16string& root, const std::u16string& sub, std::vector<io::TreeEntry>& out)
 {
-    // A directory deep enough to overflow FS's path limit would fail the open with
-    // an opaque Result; name it here instead, and stop the walk on the same code
-    // checkPathLengths would report for the entries under it.
+
     if (root.length() + sub.length() > io::MAX_PATH_UNITS) {
         Logging::error("Path too long to enumerate ({} units, limit {}): {}", root.length() + sub.length(), io::MAX_PATH_UNITS,
             StringUtils::UTF16toUTF8(root + sub));
@@ -160,10 +144,7 @@ Result io::checkPathLengths(const std::vector<TreeEntry>& entries, const std::u1
 
 size_t io::dropHostMetadata(std::vector<TreeEntry>& entries)
 {
-    // A metadata *directory* has to take its whole subtree with it. collectTree emits
-    // a folder before its contents and every child's rel keeps the parent's prefix,
-    // so testing each component of rel covers the file and the subtree case in one
-    // pass — no need to remember which parents were dropped.
+
     const auto isMetadata = [](const std::u16string& rel) {
         const std::string path = StringUtils::UTF16toUTF8(rel);
         for (size_t start = 0;;) {
@@ -194,9 +175,7 @@ size_t io::dropHostMetadata(std::vector<TreeEntry>& entries)
 
 std::vector<std::string> io::dropInUse(FS_Archive arch, const std::u16string& root, std::vector<TreeEntry>& entries)
 {
-    // A file that does not exist on the console side (a restore bringing back
-    // something that was since deleted) fails the probe with a different result
-    // and stays in the plan; only the in-use answer drops an entry.
+
     std::vector<std::string> dropped;
     entries.erase(std::remove_if(entries.begin(), entries.end(),
                       [&](const TreeEntry& entry) {
@@ -245,17 +224,14 @@ Result io::copyFile(
 
     Result res = 0;
     u32 offset = 0;
-    u32 chunk  = size; // shrinks toward the readable-data boundary on RES_FS_PAST_DATA
+    u32 chunk  = size;
     do {
         if (sink.cancelled()) {
             break;
         }
         u32 rd = input.read(buffer, chunk);
         if (R_FAILED(input.result())) {
-            // Sparse extdata: this offset+chunk runs past the file's real data. Halve
-            // the request to recover any readable prefix at this offset; once even a
-            // single byte can't be read here, we've hit the true end of data — stop
-            // this file cleanly and keep the backup going.
+
             if ((u32)input.result() == RES_FS_PAST_DATA) {
                 if (chunk > 1) {
                     chunk /= 2;
@@ -298,7 +274,7 @@ Result io::copyFile(
 Result io::copyTree(FS_Archive srcArch, FS_Archive dstArch, const std::u16string& srcRoot, const std::u16string& dstRoot,
     const std::vector<TreeEntry>& entries, ProgressSink& sink)
 {
-    // One scratch buffer for every file in the tree instead of a per-file new/delete.
+
     auto buf   = std::make_unique<u8[]>(BUFFER_SIZE);
     Result res = 0;
 
@@ -309,7 +285,7 @@ Result io::copyTree(FS_Archive srcArch, FS_Archive dstArch, const std::u16string
         std::u16string dst = dstRoot + entry.rel;
         if (entry.folder) {
             res = io::createDirectory(dstArch, dst);
-            // An existing directory is as good as a new one.
+
             if (R_FAILED(res) && (u32)res != RES_FS_DIR_EXISTS) {
                 return res;
             }
@@ -403,13 +379,6 @@ Result io::deleteFolderRecursively(FS_Archive arch, const std::u16string& path, 
     return 0;
 }
 
-// Backs up a DS cartridge whose save lives in on-cart NAND rather than on an
-// SPI EEPROM. Nothing here goes through FS: the bytes come off the cartridge by
-// driving the NTRCARD controller while Process9 still owns the slot
-//
-// Roughly 64 s of card time for a 16-MiB save. That is the poll-synchronised,
-// double-read path's cost, and it is what makes the result trustworthy: three
-// faster builds produced complete, plausible, silently corrupt images.
 static io::IoOutcome backupCardNandSave(
     const BackupTarget& target, Title& title, const DSCard::NandSave& nand, const std::u16string& dstPath, ProgressSink& sink)
 {
@@ -418,9 +387,6 @@ static io::IoOutcome backupCardNandSave(
         return {false, 0, io::BackupStage::CardNandSave};
     }
 
-    // Checkpoint's own cart-detect poll drives Process9 card IO, which takes the
-    // NTRCARD controller away mid-transfer. Hold it off across the gates and the
-    // whole read.
     const TitleCatalog::CartScanPause cartScanPause;
 
     std::unique_ptr<u8[]> banner(new (std::nothrow) u8[0x23C0]);
@@ -435,9 +401,7 @@ static io::IoOutcome backupCardNandSave(
     }
 
     const DSCardNand::Session session = DSCardNand::prepare(title.mediaType(), nand, banner.get());
-    // The gates are the banner's only consumer, and what follows wants one
-    // contiguous 16-MiB allocation. Holding 9 KiB across that is a needless way
-    // to fragment the heap into refusing it.
+
     banner.reset();
     if (!session.ready) {
         Logging::error("Card NAND backup of {} refused: the cartridge did not pass the read-only gate chain, so no save data was read.",
@@ -445,7 +409,6 @@ static io::IoOutcome backupCardNandSave(
         return {false, 0, io::BackupStage::CardNandSave};
     }
 
-    // Start from a clean destination folder, exactly as the SPI path does.
     if (io::directoryExists(Archive::sdmc(), dstPath)) {
         res = FSUSER_DeleteDirectoryRecursively(Archive::sdmc(), fsMakePath(PATH_UTF16, dstPath.data()));
         if (R_FAILED(res)) {
@@ -508,9 +471,7 @@ static io::IoOutcome restoreCardNandSave(
     }
 
     const DSCardNand::Session session = DSCardNand::prepare(title.mediaType(), nand, banner.get());
-    // The gates are the banner's only consumer, and what follows wants one
-    // contiguous 16-MiB allocation. Holding 9 KiB across that is a needless way
-    // to fragment the heap into refusing it.
+
     banner.reset();
     if (!session.ready) {
         Logging::error("Card NAND restore of {} refused: the cartridge did not pass the read-only gate chain, so nothing was written.",
@@ -543,14 +504,6 @@ static io::IoOutcome restoreCardNandSave(
     return {true, 0, io::BackupStage::Copy};
 }
 
-// Writes a DS cart save, already read into memory, as a new file in the backup
-// folder the caller has just created.
-//
-// Creating that file has been seen to fail with FS NotFound (0xC8804478) right
-// after the folder was made, and a plain retry by hand worked (#584). So the
-// open is retried a few times, first putting the folder back if FS no longer
-// has it. Each failed open is logged together with whether the folder was still
-// there, which is the part the #584 log could not tell.
 static Result writeCardSave(const std::u16string& folder, const std::u16string& path, const u8* data, u32 size)
 {
     static constexpr int attempts = 4;
@@ -612,7 +565,6 @@ io::IoOutcome io::backup(const BackupTarget& target, const std::u16string& dstPa
             return {false, res, BackupStage::OpenArchive};
         }
 
-        // Start from a clean destination folder.
         if (io::directoryExists(Archive::sdmc(), dstPath)) {
             res = FSUSER_DeleteDirectoryRecursively(Archive::sdmc(), fsMakePath(PATH_UTF16, dstPath.data()));
             if (R_FAILED(res)) {
@@ -647,8 +599,6 @@ io::IoOutcome io::backup(const BackupTarget& target, const std::u16string& dstPa
         else {
             std::u16string copyPath = dstPath + StringUtils::UTF8toUTF16("/");
 
-            // A DSiWare save is not its own archive: it's the title's data
-            // directory inside the TWL NAND FAT, so the copy is rooted there.
             const std::u16string archiveRoot =
                 title.isDSiWare() ? Archive::twlSaveDataPath(title.lowId(), title.highId()) : StringUtils::UTF8toUTF16("/");
 
@@ -660,17 +610,10 @@ io::IoOutcome io::backup(const BackupTarget& target, const std::u16string& dstPa
                 return {false, res, (u32)res == RES_PATH_TOO_LONG ? BackupStage::PathTooLong : BackupStage::Copy};
             }
 
-            // Extdata can share an archive with a running system process; a file it
-            // holds open can't be read at all, and failing the whole backup over
-            // HOME Menu's icon cache left users with no backup of the rest (#592).
-            // A save is never filtered: it is copied whole or not at all.
             if (target.kind() == BackupKind::Extdata) {
                 skippedInUse = io::dropInUse(handle.fs(), archiveRoot, entries);
             }
 
-            // The console-side tree is short; it is the SD destination — root plus
-            // title folder plus the backup name the user just typed — that can push
-            // a deep save over the limit. Say so now, not half a copy in.
             res = io::checkPathLengths(entries, archiveRoot, copyPath);
             if (R_FAILED(res)) {
                 FSUSER_DeleteDirectoryRecursively(Archive::sdmc(), fsMakePath(PATH_UTF16, dstPath.data()));
@@ -705,10 +648,9 @@ io::IoOutcome io::backup(const BackupTarget& target, const std::u16string& dstPa
     else {
         CardType cardType = title.SPICardType();
         u32 saveSize      = SPIGetCapacity(cardType);
-        // NO_CHIP / an unreadable cart reports 0 capacity; guard the division below.
+
         if (saveSize == 0) {
-            // A cart whose save is in on-cart NAND has no SPI chip to report a
-            // capacity, so it lands here.
+
             const DSCard::NandSave nand = DSCard::probeNandSave(title.mediaType());
             if (nand.present) {
                 DSCard::logNandSave(nand);
@@ -725,10 +667,6 @@ io::IoOutcome io::backup(const BackupTarget& target, const std::u16string& dstPa
         sink.begin("Backup", 1);
         sink.startFile(fileName, saveSize);
 
-        // The whole save comes off the cart before the SD card is touched. A read
-        // failure or a cancel then leaves the backup being overwritten as it was,
-        // and the destination folder is created right before its file instead of
-        // a whole cart read earlier (#584).
         std::unique_ptr<u8[]> saveFile(new u8[saveSize]);
         const u32 sectors = saveSize / sectorSize;
         for (u32 i = 0; i < sectors; ++i) {
@@ -746,7 +684,6 @@ io::IoOutcome io::backup(const BackupTarget& target, const std::u16string& dstPa
             sink.advanceBytes(sectorSize * (i + 1));
         }
 
-        // Start from a clean destination folder.
         if (io::directoryExists(Archive::sdmc(), dstPath)) {
             res = FSUSER_DeleteDirectoryRecursively(Archive::sdmc(), fsMakePath(PATH_UTF16, dstPath.data()));
             if (R_FAILED(res)) {
@@ -818,9 +755,6 @@ io::IoOutcome io::restore(const BackupTarget& target, const std::u16string& srcP
             const bool isTwl       = title.isDSiWare();
             std::u16string dstPath = isTwl ? Archive::twlSaveDataPath(title.lowId(), title.highId()) : StringUtils::UTF8toUTF16("/");
 
-            // Walk and vet the backup *before* touching what is on the console: a
-            // source that can't be enumerated, or that holds a path FS will refuse,
-            // must not cost the user the save that is still there.
             std::vector<io::TreeEntry> entries;
             res = io::collectTree(Archive::sdmc(), fullSrc, entries);
             if (R_FAILED(res)) {
@@ -828,20 +762,11 @@ io::IoOutcome io::restore(const BackupTarget& target, const std::u16string& srcP
                 return {false, res, (u32)res == RES_PATH_TOO_LONG ? BackupStage::PathTooLong : BackupStage::Copy};
             }
 
-            // A backup folder that has been through a desktop OS carries files the
-            // console never wrote — most often macOS AppleDouble sidecars, which the
-            // save archive refuses outright and which used to fail the restore with
-            // the console-side save already wiped (#577). They are not save data:
-            // drop them from the plan before anything is counted or copied.
             const size_t dropped = io::dropHostMetadata(entries);
             if (dropped > 0) {
                 Logging::info("Skipped {} host metadata entries in the backup; they are not part of the save.", dropped);
             }
 
-            // The console-side twin of the backup filter. It has to run before the
-            // clear below: a file another process holds open survives the clear,
-            // and its copy would then fail with everything else already deleted —
-            // half of HOME Menu's extdata gone for a backup taken before #592.
             if (target.kind() == BackupKind::Extdata) {
                 skippedInUse = io::dropInUse(handle.fs(), dstPath, entries);
             }
@@ -859,21 +784,19 @@ io::IoOutcome io::restore(const BackupTarget& target, const std::u16string& srcP
                 }
             }
 
-            // Nothing to put back: restoring would only wipe what is on the console.
-            // Reachable now that metadata-only folders filter down to an empty plan.
             if (fileCount == 0) {
                 Logging::error("Refusing to restore {}: the backup holds no files.", target.dataTypeName());
                 return {false, 0, BackupStage::EmptyBackup};
             }
 
             if (isTwl) {
-                // The TWL FAT `data` directory must survive; only its contents go.
+
                 sink.begin("Clearing", countFilesRecursively(handle.fs(), dstPath));
                 deleteFolderContentsRecursively(handle.fs(), dstPath, &sink);
                 sink.end();
             }
             else if (target.kind() != BackupKind::Extdata) {
-                // One syscall, nothing to report against.
+
                 FSUSER_DeleteDirectoryRecursively(handle.fs(), fsMakePath(PATH_UTF16, dstPath.data()));
             }
             else {
@@ -890,7 +813,6 @@ io::IoOutcome io::restore(const BackupTarget& target, const std::u16string& srcP
                 return {false, res, BackupStage::Copy};
             }
 
-            // A TWL FAT write needs no commit and has no secure value.
             if (target.kind() == BackupKind::Save && !isTwl) {
                 res = FSUSER_ControlArchive(handle.fs(), ARCHIVE_ACTION_COMMIT_SAVE_DATA, NULL, 0, NULL, 0);
                 if (R_FAILED(res)) {
@@ -912,10 +834,9 @@ io::IoOutcome io::restore(const BackupTarget& target, const std::u16string& srcP
         CardType cardType = title.SPICardType();
         u32 saveSize      = SPIGetCapacity(cardType);
         u32 pageSize      = SPIGetPageSize(cardType);
-        // NO_CHIP / an unreadable cart reports 0 capacity or page size; guard the divisions below.
+
         if (saveSize == 0 || pageSize == 0) {
-            // See the matching guard in io::backup: on-cart NAND saves have no SPI
-            // chip, and writing one back needs card commands 3DS mode never issues.
+
             const DSCard::NandSave nand = DSCard::probeNandSave(title.mediaType());
             if (nand.present) {
                 DSCard::logNandSave(nand);
@@ -943,9 +864,6 @@ io::IoOutcome io::restore(const BackupTarget& target, const std::u16string& srcP
             return {false, res, BackupStage::ReadFile};
         }
 
-        // The 8MB flash cart is write-protected until its vendor unlock runs.
-        // Detection already unlocks it, but re-arm it here so a restore is never gated by protection
-        // (idempotent and cheap: a handful of short 512KHz frames).
         if (cardType == FLASH_8MB) {
             SPIUnlock(cardType);
         }

@@ -31,11 +31,6 @@
 #include <functional>
 #include <string>
 
-// Modal title picker used by the Settings Library / Folders "add" flows. Lists
-// every catalog title (Save kind) with icon + name on the top screen; A selects
-// (invokes onPick with the title id, then dismisses), B cancels. The picked id
-// is all the caller needs — what it does with the choice (favorite / hide /
-// prompt for a folder path) lives in the caller's callback.
 class TitlePickerOverlay : public ListPickerOverlay {
 public:
     TitlePickerOverlay(Screen& screen, const std::string& prompt, const std::function<void(u64)>& onPick);

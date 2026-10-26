@@ -32,7 +32,7 @@
 
 Configuration::Configuration(void)
 {
-    // check for existing config.json files on the sd card, BASEPATH
+
     if (!io::fileExists(Archive::sdmc(), StringUtils::UTF8toUTF16(BASEPATH.c_str()))) {
         loadFromRomfs();
     }
@@ -42,7 +42,6 @@ Configuration::Configuration(void)
             mJson = std::make_unique<nlohmann::json>(nlohmann::json::parse(in, nullptr, false));
             fclose(in);
 
-            // check if json is valid
             if (!mJson->is_object()) {
                 loadFromRomfs();
                 return;
@@ -50,7 +49,7 @@ Configuration::Configuration(void)
 
             bool updateJson = false;
             if (mJson->find("version") == mJson->end()) {
-                // if config is present but is < 3.4.2, override it
+
                 loadFromRomfs();
                 return;
             }
@@ -128,7 +127,7 @@ Configuration::Configuration(void)
                     (*mJson)["additional_extdata_folders"] = nlohmann::json::object();
                     updateJson                             = true;
                 }
-                // check every single entry in the arrays...
+
                 for (auto& obj : (*mJson)["filter"]) {
                     if (!obj.is_string()) {
                         (*mJson)["filter"] = nlohmann::json::array();
@@ -164,13 +163,11 @@ Configuration::Configuration(void)
                 save();
             }
 
-            // parse filters
             std::vector<std::string> filter = (*mJson)["filter"];
             for (auto& id : filter) {
                 mFilterIds.emplace(strtoull(id.c_str(), NULL, 16));
             }
 
-            // parse favorites
             std::vector<std::string> favorites = (*mJson)["favorites"];
             for (auto& id : favorites) {
                 mFavoriteIds.emplace(strtoull(id.c_str(), NULL, 16));
@@ -190,7 +187,6 @@ Configuration::Configuration(void)
             mDefaultReceivePin   = (*mJson)["default_receive_pin"];
             mServerPort          = (*mJson)["server_port"];
 
-            // parse additional save folders
             auto js = (*mJson)["additional_save_folders"];
             for (auto it = js.begin(); it != js.end(); ++it) {
                 std::vector<std::string> folders = it.value()["folders"];
@@ -201,7 +197,6 @@ Configuration::Configuration(void)
                 mAdditionalSaveFolders.emplace(strtoull(it.key().c_str(), NULL, 16), u16folders);
             }
 
-            // parse additional extdata folders
             auto je = (*mJson)["additional_extdata_folders"];
             for (auto it = je.begin(); it != je.end(); ++it) {
                 std::vector<std::string> folders = it.value()["folders"];
@@ -438,7 +433,6 @@ void Configuration::setServerPort(u16 v)
     save();
 }
 
-// Rebuilds a json string-array of hex title ids from the given set.
 static nlohmann::json idSetToJson(const std::unordered_set<u64>& ids)
 {
     auto arr = nlohmann::json::array();
@@ -448,7 +442,6 @@ static nlohmann::json idSetToJson(const std::unordered_set<u64>& ids)
     return arr;
 }
 
-// Rebuilds a json object { "<hexid>": { "folders": [ ... ] } } from the map.
 static nlohmann::json folderMapToJson(const std::unordered_map<u64, std::vector<std::u16string>>& map)
 {
     auto obj = nlohmann::json::object();
@@ -466,7 +459,7 @@ void Configuration::addFavorite(u64 id)
 {
     std::lock_guard<std::mutex> lock(mIdMutex);
     if (!mFavoriteIds.insert(id).second) {
-        return; // already a favorite
+        return;
     }
     (*mJson)["favorites"] = idSetToJson(mFavoriteIds);
     mDirty                = true;
@@ -476,7 +469,7 @@ void Configuration::addFilter(u64 id)
 {
     std::lock_guard<std::mutex> lock(mIdMutex);
     if (!mFilterIds.insert(id).second) {
-        return; // already filtered
+        return;
     }
     (*mJson)["filter"] = idSetToJson(mFilterIds);
     mDirty             = true;
@@ -486,7 +479,7 @@ void Configuration::addSaveFolder(u64 id, const std::u16string& path)
 {
     auto& vec = mAdditionalSaveFolders[id];
     if (std::find(vec.begin(), vec.end(), path) != vec.end()) {
-        return; // already present for this title
+        return;
     }
     vec.push_back(path);
     (*mJson)["additional_save_folders"] = folderMapToJson(mAdditionalSaveFolders);
@@ -497,7 +490,7 @@ void Configuration::addExtdataFolder(u64 id, const std::u16string& path)
 {
     auto& vec = mAdditionalExtdataFolders[id];
     if (std::find(vec.begin(), vec.end(), path) != vec.end()) {
-        return; // already present for this title
+        return;
     }
     vec.push_back(path);
     (*mJson)["additional_extdata_folders"] = folderMapToJson(mAdditionalExtdataFolders);

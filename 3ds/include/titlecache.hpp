@@ -32,30 +32,17 @@
 #include <3ds.h>
 #include <cstddef>
 
-// Serialization of a Title to/from the on-SD title cache. The fixed binary
-// layout (field offsets, entry size) is declared exactly once here. encode/decode are the
-// inverse of each other and are the only code that knows the byte format.
 namespace TitleCache {
-    // Size of one serialized title entry, in bytes.
+
     constexpr std::size_t ENTRY_SIZE = 5341;
 
-    // Bump whenever the on-SD byte format changes so stale caches (e.g. ones
-    // written before the encode() field clamp) are treated as fresh-miss and
-    // regenerated. Folded into the title-DB hash by calculateTitleDBHash().
-    constexpr u32 FORMAT_VERSION = 3; // 3: TWL (DSiWare) entries carry a decoded DS icon
+    constexpr u32 FORMAT_VERSION = 3;
 
-    // Writes one entry (ENTRY_SIZE bytes) at dst, including the CTR icon bytes
-    // reused from `icons` (the probe already read them from the SMDH; a cache
-    // miss falls back to a fresh SMDH read). Zero-fills the entry first.
     void encode(u8* dst, Title& title, IconStore& icons);
 
-    // Reads one entry at src into a fully-formed Title, storing its icon bytes
-    // into `icons` under the title's id.
     Title decode(const u8* src, IconStore& icons);
 
-    // Peeks the title id of an entry without decoding the rest (used to dedup the
-    // save and extdata caches, which share entries).
     u64 readId(const u8* src);
 }
 
-#endif // TITLECACHE_HPP
+#endif

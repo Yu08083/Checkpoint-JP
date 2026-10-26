@@ -37,7 +37,7 @@ class Screen {
 
 public:
     virtual ~Screen() = default;
-    // Call draw, then currentOverlay->draw if it exists
+
 #if defined(__3DS__)
     void doDrawTop(void) const;
     void doDrawBottom(void) const;
@@ -47,20 +47,18 @@ public:
     void doDraw() const;
     virtual void draw() const = 0;
 #endif
-    // Call currentOverlay->update if it exists, and update if it doesn't
+
     void doUpdate(const InputState&);
     virtual void update(const InputState&) = 0;
-    // Whether pressing START should quit the app from this screen.
+
     virtual bool allowsExit() const { return true; }
     void removeOverlay() { currentOverlay.reset(); }
-    // True while an overlay owns update(). The main loop asks before routing a
-    // key it also gives to overlays (the D-Pad, on the script log pane).
+
     bool hasOverlay() const { return currentOverlay != nullptr; }
     void setOverlay(std::shared_ptr<Overlay>& overlay) { currentOverlay = overlay; }
 
 protected:
-    // No point in restricting this to only being editable during update, especially since it's drawn afterwards. Allows setting it before the first
-    // draw loop is done
+
     mutable std::shared_ptr<Overlay> currentOverlay;
 };
 

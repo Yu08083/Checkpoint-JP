@@ -34,35 +34,18 @@ extern "C" {
 }
 
 namespace {
-    // picoc's own heap, not the OS thread stack: every variable, string and
-    // parse node the script allocates comes out of this. PKSM ships 32 KB;
-    // bundled sharkive.c parses a ~2 MB cheat DB (held natively, not here) but
-    // has a deeper parse tree and more locals, so give scripts 64 KB of margin.
+
     constexpr int PICOC_STACKSIZE = 64 * 1024;
 
-    // How much of the tail the Outcome carries. Same budget as the old static
-    // capture buffer, but now a view over the console rather than the only copy
-    // of the output — the pane holds (and scrolls) far more than this.
     constexpr size_t OUTPUT_TAIL = 4096;
 }
 
 ScriptEngine::Outcome ScriptEngine::run(const std::string& path, const std::vector<std::string>& args)
 {
-    // Script printf() and every picoc diagnostic land in ScriptConsole (see
-    // ckpt_console_stdout): the run's output is readable while it happens, not
-    // only once it ends. ScriptRunner clears the console before starting.
+
     Picoc pc;
     PicocInitialize(&pc, PICOC_STACKSIZE);
 
-    // Anything that fails inside picoc — a parse error, a script exit() — longjmps
-    // back to here with PicocExitValue set, so no C++ frame holding a resource may
-    // live between this setjmp and PicocCleanup.
-    //
-    // A binding can also throw (std::bad_alloc while a script builds a big string
-    // or parses a large web response is the realistic one). picoc's C frames are
-    // compiled with -funwind-tables so the throw can unwind back to here rather
-    // than std::terminate()ing the app; catch it and report a failed run. The
-    // catch sits outside the setjmp region so a normal longjmp bypasses it.
     try {
         if (!PicocPlatformSetExitPoint(&pc)) {
             std::vector<char*> argv;

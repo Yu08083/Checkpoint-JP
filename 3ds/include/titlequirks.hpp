@@ -29,18 +29,11 @@
 
 #include <3ds.h>
 
-// Per-game special-casing, gathered into one place. These are hardcoded tables
-// keyed by title id — system titles Checkpoint should never back up, extdata-id
-// remaps that don't follow the usual `lowId >> 8` rule, and the activity-log
-// ids.
 namespace TitleQuirks {
-    // System titles (manuals, updates, known garbage) that should be
-    // excluded from the title list regardless of user configuration.
+
     bool isSystemExcluded(u64 id);
 
-    // The extdata archive id for a title. Usually `lowId >> 8`, but a handful of
-    // games store extdata under a different id; this returns the correct one.
     u32 extdataIdFor(u64 id);
 }
 
-#endif // TITLEQUIRKS_HPP
+#endif

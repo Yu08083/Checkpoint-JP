@@ -32,8 +32,7 @@ namespace {
     std::string scaled(double n, const char* unit)
     {
         char buf[32];
-        // One decimal below 10 of a unit, none above: "1.4 MB" is worth the
-        // digit, "947.3 MB" is noise in a figure that moves every frame.
+
         if (n < 10.0) {
             snprintf(buf, sizeof buf, "%.1f %s", n, unit);
         }
@@ -78,8 +77,7 @@ namespace ScriptBar {
                 out = std::to_string((int)(fraction(layer) * 100.0f)) + "%";
             }
             else if (layer.done > 0) {
-                // No known total (a stream): the amount moved so far is the
-                // only real figure.
+
                 out = bytes(layer.done);
             }
             if (layer.rate > 0.0) {
@@ -91,9 +89,6 @@ namespace ScriptBar {
             return out;
         }
 
-        // An item bar: the count the script is keeping, verbatim. Shown for an
-        // idle bar too — it finished at that count, and blanking it would make
-        // a finished row indistinguishable from one that never ran.
         if (layer.total > 0) {
             return std::to_string(layer.done) + "/" + std::to_string(layer.total);
         }

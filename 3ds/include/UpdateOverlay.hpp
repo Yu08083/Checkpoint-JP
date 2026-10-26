@@ -35,14 +35,6 @@
 #include <memory>
 #include <string>
 
-// Runs one accepted update to completion. The download and install happen on a
-// worker thread so the main loop keeps drawing: this overlay is the bar that
-// makes that visible, polling AutoUpdater::progress() once a frame. It takes no
-// input — the transfer cannot be cancelled, and quitting is blocked by
-// AutoUpdater::busy() while it runs.
-//
-// On success it calls `onInstalled`, which main() uses to leave its loop and
-// relaunch; on failure it replaces itself with the install-failed notice.
 class UpdateOverlay : public Overlay {
 public:
     UpdateOverlay(Screen& screen, const AutoUpdater::Update& update, std::function<void()> onInstalled);
@@ -53,13 +45,9 @@ public:
 private:
     static constexpr float SIZE = 0.5f;
 
-    // Held by both the overlay and the worker task: the worker outlives this
-    // overlay if the screen is torn down mid-transfer (a forced exit), so the
-    // state it writes cannot live in the overlay itself.
     struct Job {
         AutoUpdater::Update update;
-        // Written once by the worker as its last act, read by the UI thread
-        // every frame; the release/acquire pair publishes `outcome` with it.
+
         std::atomic<bool> finished{false};
         AutoUpdater::Outcome outcome = AutoUpdater::Outcome::Failed;
     };

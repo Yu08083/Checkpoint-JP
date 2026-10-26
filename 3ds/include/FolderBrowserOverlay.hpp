@@ -32,14 +32,6 @@
 #include <string>
 #include <vector>
 
-// Starts at the SD root and lists only sub-directories of the current folder.
-//   A     descend into the highlighted folder
-//   X     use the current folder (invokes onPick with its full "sdmc:/..." path,
-//         then dismisses)
-//   B     go up one level; at the root it cancels the overlay
-//
-// The picked path is all the caller needs — what it does with the choice
-// (attach it to a title as an extra save / extdata folder) lives in onPick.
 class FolderBrowserOverlay : public ListPickerOverlay {
 public:
     FolderBrowserOverlay(Screen& screen, const std::string& prompt, const std::function<void(const std::u16string&)>& onPick);
@@ -52,17 +44,14 @@ private:
     void drawRowContent(int k, int rowY, bool selected) const override;
     std::string bottomHints(void) const override;
 
-    // Full "sdmc:/..." path of the current folder, for onPick and the header.
     std::u16string currentPath(void) const;
-    // (Re)reads mCurrent's sub-directories into mFolders and resets the cursor.
+
     void readFolders(void);
 
     std::function<void(const std::u16string&)> mOnPick;
 
-    // Archive-relative path of the current folder, always starting with '/'
-    // ("/" is the SD root). Descending appends "/name"; going up strips a level.
     std::u16string mCurrent = u"/";
-    std::vector<std::u16string> mFolders; // sub-folder names of mCurrent
+    std::vector<std::u16string> mFolders;
 };
 
 #endif

@@ -39,8 +39,7 @@ namespace {
 void ScriptTile::card(int x, int y, int w, int h, u32 outline, float z)
 {
     C2D_DrawRectSolid((float)x, (float)y, z, (float)w, (float)h, COLOR_CARD);
-    // drawOutline draws *around* the rect, so the ring sits in the margin the
-    // tile leaves against the screen edge rather than eating a content pixel.
+
     Gui::drawOutline(x, y, w, h, 1, outline);
 }
 
@@ -53,7 +52,7 @@ int ScriptTile::uiFrame(const std::string& title, const std::string& note, u32 o
     if (!note.empty()) {
         noteW = text.width(note, NOTE_SIZE);
         text.draw(note, UI_X + UI_W - PAD - noteW, UI_Y + PAD + 2, NOTE_SIZE, COLOR_FAINT, z);
-        noteW += 8; // gap between the title and the note
+        noteW += 8;
     }
     const float titleMax = UI_W - 2 * PAD - noteW;
     text.draw(text.truncate(title, titleMax, TITLE_SIZE), UI_X + PAD, UI_Y + PAD - 2, TITLE_SIZE, COLOR_TEXT, z);
@@ -79,8 +78,6 @@ void ScriptTile::bar(int x, int y, int w, const ScriptConsole::Layer& layer, flo
         C2D_DrawRectSolid((float)x, (float)y, z, fillW, (float)BAR_H, COLOR_ACCENT);
     }
 
-    // An idle slot still says what it is and where it got to, dimmed: a bare
-    // track with nothing under it reads as a bar that is stuck.
     const u32 labelColor = layer.active ? COLOR_MUTED : COLOR_FAINT;
     const u32 rightColor = layer.active ? COLOR_TEXT : COLOR_FAINT;
 
@@ -98,8 +95,7 @@ void ScriptTile::bar(int x, int y, int w, const ScriptConsole::Layer& layer, flo
 size_t ScriptTile::collectBars(const ScriptConsole::ProgressSnapshot& snapshot, ScriptConsole::Layer* out)
 {
     size_t count = 0;
-    // Every slot the run has claimed, active or not: an idle slot draws as an
-    // empty track so the stack keeps its height between items.
+
     for (size_t i = 0; i < snapshot.layerSlots; i++) {
         out[count++] = snapshot.layers[i];
     }

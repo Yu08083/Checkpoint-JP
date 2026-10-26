@@ -30,8 +30,7 @@ UiResponse ScriptUiBridge::request(UiRequest req)
 {
     std::unique_lock<std::mutex> lock(mMutex);
     if (mCancelled) {
-        // Abort in progress: don't park, hand back "cancelled" so the script
-        // reaches its next statement (where picoc's abort hook fails the run).
+
         return UiResponse{};
     }
     mReq   = std::move(req);

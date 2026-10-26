@@ -34,18 +34,13 @@
 #include <optional>
 #include <string>
 
-// The single owner of "a script is running on a worker thread". Mirrors the
-// TransferJob shape: Meyer's singleton, start() spawns the worker, active()
-// gates exit/refresh/other jobs, takeResult() polled from the main loop each
-// frame. The worker just runs ScriptEngine::run; gui_* bindings park it on the
-// bridge until the main loop answers. One script at a time — enforced here.
 class ScriptRunner {
 public:
     struct Outcome {
-        std::string scriptName; // display name, for the result overlay
+        std::string scriptName;
         int exitValue = 0;
-        std::string output;     // everything the script printed (4 KB cap)
-        bool cancelled = false; // ended because the user requested an abort
+        std::string output;
+        bool cancelled = false;
     };
 
     static ScriptRunner& get(void)
@@ -54,46 +49,24 @@ public:
         return instance;
     }
 
-    // Main thread. Spawns the worker and returns true, or false when a script
-    // is already running / the thread could not be created. `titleIdHex` is the
-    // selected title as 16-hex-uppercase ("" when none) — it becomes the
-    // script's argv[0] and the selected_title() binding.
     bool start(std::string scriptPath, std::string displayName, std::string titleIdHex);
 
-    // True from start() until takeResult() collects the outcome.
     bool active(void) const { return mState.load() != State::Idle; }
 
-    // Main thread, the kill switch: answers the pending/future bridge requests
-    // as cancelled and makes picoc fail the run at the next statement, so even
-    // a script stuck in a loop dies without rebooting the console. The worker
-    // then finishes normally through the usual takeResult() path. No-op when
-    // no script is running.
     void requestCancel(void);
 
-    // Main thread, for the "Cancelling…" hint.
     bool cancelRequested(void) const;
 
-    // Main thread, at app teardown: the whole "stop the script and reap it"
-    // sequence in one call — raise the abort, unpark any bridge wait, then
-    // block until the worker has left run(). Both are required and in this
-    // order: a worker parked in mCv.wait is waiting on a main loop that no
-    // longer exists, so reaping it (Threads::exit on 3DS, Threads::join on
-    // Switch) without unparking it first deadlocks the app at exit. Call this
-    // before that reap on every exit path; no-op when no script is running.
     void shutdown(void);
 
-    // If the script finished, returns its outcome and resets to idle.
     std::optional<Outcome> takeResult(void);
 
     ScriptUiBridge& bridge(void) { return mBridge; }
 
-    // Script thread (the selected_title binding). Written only while idle.
     const std::string& selectedTitle(void) const { return mTitleIdHex; }
 
-    // Main thread, for the status strip. Written only while idle.
     const std::string& scriptName(void) const { return mName; }
 
-    // Worker entry point (thunk to get().run()).
     static void runThread(void);
 
 private:
@@ -101,16 +74,13 @@ private:
 
     void run(void);
 
-    // PicoC recurses on ParseStatement for nested C constructs, so the worker
-    // needs far more OS stack than the 32 KB default — PKSM effectively ran on
-    // the whole main-thread stack. Distinct from picoc's own 32 KB heap.
     static constexpr size_t THREAD_STACK = 128 * 1024;
 
     enum class State { Idle, Running, Done };
 
     std::atomic<State> mState{State::Idle};
-    std::mutex mMutex;               // guards mOutcome, and the Running -> Done transition
-    std::condition_variable mDoneCv; // signalled by the worker as it leaves run()
+    std::mutex mMutex;
+    std::condition_variable mDoneCv;
     Outcome mOutcome;
     std::string mPath, mName, mTitleIdHex;
     ScriptUiBridge mBridge;

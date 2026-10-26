@@ -41,11 +41,10 @@
 #include <algorithm>
 
 namespace {
-    constexpr float LOG_SIZE   = 1.0f; // one atlas texel per pixel; MONO_SIZE picks the size
+    constexpr float LOG_SIZE   = 1.0f;
     constexpr float TITLE_SIZE = 0.45f;
     constexpr float SMALL_SIZE = 0.42f;
-    // Rows are packed tighter than the face's own line height: a transcript is
-    // read in blocks, and the extra leading only costs rows.
+
     constexpr float LOG_LINE_TIGHTEN = 1.0f;
 }
 
@@ -70,7 +69,7 @@ bool ScriptScreen::showing(void)
 void ScriptScreen::configureLogWidth(void)
 {
     const float advance = TextPool::get().monoAdvance(LOG_SIZE);
-    // SCROLLBAR_W keeps the longest line clear of the scrollbar track.
+
     constexpr int SCROLLBAR_W = 8;
     const int usable          = ScriptTile::LOG_W - 2 * ScriptTile::LOG_PAD - SCROLLBAR_W;
     if (advance > 0.0f) {
@@ -83,8 +82,6 @@ void ScriptScreen::drawTop(void) const
     TextPool& text     = TextPool::get();
     ScriptLogView& log = ScriptLogView::get();
 
-    // Every screen clears both targets and binds the top one before it draws:
-    // main.cpp only binds g_bottom, between doDrawTop and doDrawBottom.
     C2D_TargetClear(g_top, COLOR_BASE);
     C2D_TargetClear(g_bottom, COLOR_BASE);
     C2D_SceneBegin(g_top);
@@ -94,20 +91,14 @@ void ScriptScreen::drawTop(void) const
     const int innerX = ScriptTile::LOG_X + ScriptTile::LOG_PAD;
     const int innerW = ScriptTile::LOG_W - 2 * ScriptTile::LOG_PAD;
 
-    // ---- header: what is running, and how far the pane is scrolled back ----
     text.draw(text.truncate(mName, innerW - 120, TITLE_SIZE), innerX, ScriptTile::LOG_Y + ScriptTile::LOG_PAD, TITLE_SIZE, COLOR_TEXT, 0.5f);
     {
-        // The scroll hint lives here, on the screen no dialog covers, so the
-        // bottom tile's hint line is free to describe only whatever is asking
-        // there.
+
         const float noteY      = ScriptTile::LOG_Y + ScriptTile::LOG_PAD + 1;
         const std::string hint = std::string(GLYPH_DPAD_UD) + GLYPH_L + GLYPH_R + " " + i18n::t("scripts.scroll_logs");
         const float hintX      = innerX + innerW - text.width(hint, SMALL_SIZE);
         text.draw(hint, hintX, noteY, SMALL_SIZE, COLOR_FAINT, 0.5f);
 
-        // The scrollback marker sits to the left of the hint rather than in place
-        // of it: the keys stay named while the pane is off the tail, which is
-        // exactly when the user is looking for them.
         const int back = log.scrollBack();
         if (back > 0) {
             const std::string marker = StringUtils::format("-%d", back);
@@ -117,9 +108,6 @@ void ScriptScreen::drawTop(void) const
     const int headerLineY = ScriptTile::LOG_Y + ScriptTile::LOG_HEADER_H;
     C2D_DrawRectSolid((float)innerX, (float)headerLineY, 0.5f, (float)innerW, 1.0f, COLOR_LINE);
 
-    // ---- log rows: the whole rest of the screen ----------------------------
-    // The progress bars live on the bottom tile, next to the status line the
-    // user is already reading; this screen is nothing but transcript.
     const int logBottom = ScriptTile::LOG_Y + ScriptTile::LOG_H - ScriptTile::LOG_PAD;
     const float rowH    = std::max(1.0f, text.monoLineHeight(LOG_SIZE) - LOG_LINE_TIGHTEN);
     const int listTop   = headerLineY + 4;
@@ -137,8 +125,6 @@ void ScriptScreen::drawTop(void) const
         y += rowH;
     }
 
-    // Scrollbar, only once there is more than one screenful. The thumb is never
-    // thinner than a few pixels, whatever fraction of the log fits.
     if (win.scrollbar) {
         const float trackY = (float)listTop, trackH = (float)(logBottom - listTop);
         const float thumbH = std::max(12.0f, trackH * win.thumbSpan);
@@ -170,16 +156,12 @@ void ScriptScreen::drawBottom(void) const
         return;
     }
 
-    // A running script: its own status line, or a neutral "working" while it has
-    // not set one.
     std::string status = ScriptRunner::get().bridge().statusText();
     if (status.empty()) {
         status = i18n::t("scripts.working");
     }
     text.drawWrapped(status, (float)innerX, (float)(bodyY + 10), 0.5f, COLOR_TEXT, (float)innerW, 0.5f);
 
-    // Progress bars, stacked upwards from just above the hint line so a script
-    // opening a second layer grows the block instead of shifting it.
     ScriptConsole::Layer bars[ScriptTile::MAX_BARS];
     const size_t barCount = ScriptTile::collectBars(ScriptConsole::get().progress(), bars);
     const int barsTop     = ScriptTile::uiBodyBottom() - 4 - (int)barCount * ScriptTile::BAR_ROW_H;
@@ -196,20 +178,18 @@ void ScriptScreen::update(const InputState& input)
     (void)input;
 
     if (auto result = ScriptRunner::get().takeResult()) {
-        // HOME was blocked for the whole run (picoc cannot be preempted).
+
         aptSetHomeAllowed(true);
         mOutcome  = *result;
         mFinished = true;
-        // The last log line is the run's verdict, so the pane reads as a
-        // transcript that ends where the script did.
+
         ScriptConsole::get().log(mOutcome.cancelled        ? i18n::t("scripts.aborted", {mOutcome.scriptName})
                                  : mOutcome.exitValue == 0 ? i18n::t("scripts.success", {mOutcome.scriptName})
                                                            : i18n::t("scripts.failed", {mOutcome.scriptName}));
     }
 
     if (ScriptRunner::get().active()) {
-        // The hold-B kill switch and the log scrolling live in main.cpp:
-        // both must keep working while a script-raised overlay owns update().
+
         pumpScriptRequests(ScriptRunner::get().bridge(), *this);
         return;
     }
@@ -241,7 +221,7 @@ void ScriptScreen::showPickMany(const std::string& prompt, const std::vector<std
 
 std::string ScriptScreen::keyboard(const std::string& prompt, size_t maxChars)
 {
-    // swkbd runs on the main thread - the reason the bridge exists.
+
     return KeyboardManager::get().text("", prompt, maxChars);
 }
 
